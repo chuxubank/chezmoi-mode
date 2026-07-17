@@ -54,33 +54,23 @@ Candidates are chezmoi data values corresponding to the path at point."
       (list data))))
 
 (defun chezmoi-cape--bounds ()
-  "TODO."
-  (let* ((bounds (cape--bounds 'word))
-	 (beg (car bounds))
-	 (end (cdr bounds)))
-    (if (string-match "{{" (buffer-substring-no-properties beg end))
-	(let* ((bounds (cape--bounds 'char))
-	       (beg (car bounds))
-	       (end (1- (cdr bounds))))
-	  (cons beg end))
-      bounds)))
+  "Return the bounds of the Go template selector at point."
+  (when-let ((node (chezmoi-template--selector-node-at-point)))
+    (cons (treesit-node-start node)
+          (treesit-node-end node))))
 
 (defun chezmoi-capf ()
   "Complete current template."
-  (when (thing-at-point-looking-at chezmoi-template-regex)
-    (let* ((candidates (thread-last 1
-				    match-string
-				    chezmoi-cape--next-keys
-				    (apply-partially (lambda (c _) c)))))
-      (let* ((bounds (chezmoi-cape--bounds))
-	     (beg (car bounds))
-	     (end (cdr bounds)))
-	(buffer-substring-no-properties beg end)
-	`(,beg ,end
-	       ,(cape--table-with-properties
-		 (cape--cached-table beg end candidates 'prefix)
-		 :category 'cape-keyword)
-	       ,@chezmoi-cape--properties)))))
+  (when-let ((bounds (chezmoi-cape--bounds)))
+    (let* ((beg (car bounds))
+           (end (cdr bounds))
+           (text (buffer-substring-no-properties beg end))
+           (candidates (chezmoi-cape--next-keys text)))
+      `(,beg ,end
+             ,(cape--table-with-properties
+               (cape--cached-table beg end candidates 'prefix)
+               :category 'cape-keyword)
+             ,@chezmoi-cape--properties))))
 
 (provide 'chezmoi-cape)
 

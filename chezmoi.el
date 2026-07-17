@@ -394,10 +394,6 @@ Prefix ARG is passed to `chezmoi-write'."
       (chezmoi-find file)
     (find-file (chezmoi-target-file file))))
 
-(defun chezmoi-font-lock-keywords ()
-  "Keywords for font lock."
-  `((,chezmoi-template-regex 0 'chezmoi-template-face prepend)))
-
 ;;;###autoload
 (define-minor-mode chezmoi-mode
   "Chezmoi mode for source files."
@@ -409,10 +405,6 @@ Prefix ARG is passed to `chezmoi-write'."
 	  (add-hook 'after-save-hook #'chezmoi-write 0 t))
 	(add-hook 'after-change-functions #'chezmoi-template--after-change nil 1)
 	(chezmoi-template--activate-go-template-mode)
-
-	(unless (or (bound-and-true-p polymode-mode)
-                    (eq major-mode 'go-template-ts-mode))
-	  (font-lock-add-keywords nil (chezmoi-font-lock-keywords) 'append))
 	(chezmoi-template-buffer-display t)
 	(font-lock-ensure (point-min) (point-max)))
     (progn
@@ -420,8 +412,6 @@ Prefix ARG is passed to `chezmoi-write'."
 
       (remove-hook 'after-save-hook #'chezmoi-write t)
       (remove-hook 'after-change-functions #'chezmoi-template--after-change t)
-
-      (font-lock-remove-keywords nil (chezmoi-font-lock-keywords))
       (font-lock-ensure (point-min) (point-max)))))
 
 (provide 'chezmoi)

@@ -37,6 +37,7 @@
 ;;; Code:
 (require 'subr-x)
 (require 'chezmoi-core)
+(require 'cl-lib)
 (require 'go-template-ts-mode)
 (require 'poly-any-go-template)
 
@@ -63,15 +64,6 @@ This is called by `chezmoi-mode' before its legacy font-lock keywords run."
 (defvar-local chezmoi-template--buffer-displayed-p nil
   "Whether all templates are currently displayed in buffer.")
 
-(defface chezmoi-template-face '((t (:underline t :inherit font-lock-constant-face)))
-  "Face for displaying chezmoi templates values."
-  :group 'chezmoi)
-
-(defcustom chezmoi-template-regex "{{ *\\(\\.[^[:space:]]* *\\)}}" ; (pcre-to-elisp "\\{\\{ \\.\\S+ \\}\\}")
-  "Regex for detecting chezmoi templates."
-  :type '(choice string regexp)
-  :group 'chezmoi)
-
 (defvar chezmoi-template-key-regex "\\."
   "Regex for splitting keys.")
 
@@ -80,6 +72,42 @@ This is called by `chezmoi-mode' before its legacy font-lock keywords run."
   (thread-first "%s execute-template %s"
                 (format chezmoi-command (shell-quote-argument template))
                 shell-command-to-string))
+
+(defun chezmoi-template--selector-node-at-point ()
+  "Return the Go template selector node at point, if any."
+  (when (and (treesit-ready-p 'gotmpl)
+             (treesit-parser-list))
+    (let ((node (treesit-node-at (max (point-min) (1- (point))))))
+      (while (and node
+                  (not (equal (treesit-node-type node)
+                              "selector_expression")))
+        (setq node (treesit-node-parent node)))
+      node)))
+
+(defun chezmoi-template--treesit-expression-spans (&optional minimum maximum)
+  "Return simple Go template expression spans in the current buffer.
+Only direct selector expressions such as `{{ .foo }}' are returned."
+  (when (and (treesit-ready-p 'gotmpl)
+             (treesit-parser-list))
+    (let* ((children (treesit-node-children
+                      (treesit-buffer-root-node 'gotmpl)))
+           (length (length children))
+           (minimum (or minimum (point-min)))
+           (maximum (or maximum (point-max)))
+           spans)
+      (cl-loop for index from 1 below (1- length)
+               for opening = (nth (1- index) children)
+               for node = (nth index children)
+               for closing = (nth (1+ index) children)
+               for start = (treesit-node-start opening)
+               for end = (treesit-node-end closing)
+               when (and (member (treesit-node-type opening) '("{{" "{{-"))
+                         (equal (treesit-node-type node) "selector_expression")
+                         (member (treesit-node-type closing) '("}}" "-}}"))
+                         (<= minimum start)
+                         (<= end maximum))
+               do (push (cons start end) spans)
+               finally return (nreverse spans)))))
 
 (defun chezmoi-template--put-display-value (start end value &optional object)
   "Display the VALUE from START to END in string or buffer OBJECT."
@@ -101,20 +129,39 @@ VALUE is ignored."
       (font-lock-ensure start end)
       (font-lock-flush start end))))
 
+(defun chezmoi-template--funcall-over-spans (f spans buffer-or-name)
+  "Call F for SPANS in BUFFER-OR-NAME after executing each expression."
+  (with-current-buffer buffer-or-name
+    (dolist (span spans)
+      (let* ((start (car span))
+             (end (cdr span))
+             (template (buffer-substring-no-properties start end))
+             (value (chezmoi-template-execute template)))
+        (funcall f start end value buffer-or-name)))))
+
 (defun chezmoi-template--funcall-over-matches (f buffer-or-name)
   "Call F on each matching template in BUFFER-OR-NAME.
 F is called with the start of the match, the end of the match,
 the template value and BUFFER-OR-NAME."
   (with-current-buffer buffer-or-name
-    (let ((match -1)
-          ;; TODO Check if I need to account for the text properties updating this.
-          (string (buffer-substring-no-properties (point-min) (point-max))))
-      (while (setq match (string-match chezmoi-template-regex string (1+ match)))
-        (let* ((start (match-beginning 0))
-               (end (match-end 0))
-               (template (substring string start end))
-               (value (chezmoi-template-execute template)))
-          (funcall f (1+ start) (1+ end) value buffer-or-name))))))
+    (cond
+     ((eq major-mode 'go-template-ts-mode)
+      (chezmoi-template--funcall-over-spans
+       f (chezmoi-template--treesit-expression-spans) buffer-or-name))
+     ((bound-and-true-p polymode-mode)
+      (let ((base-buffer (current-buffer)))
+        (pm-map-over-spans
+         (lambda (span)
+           (when (eq major-mode 'go-template-ts-mode)
+             (dolist (expression
+                      (chezmoi-template--treesit-expression-spans
+                       (nth 1 span) (nth 2 span)))
+               (with-current-buffer base-buffer
+                 (let* ((start (car expression))
+                        (end (cdr expression))
+                        (template (buffer-substring-no-properties start end))
+                        (value (chezmoi-template-execute template)))
+                   (funcall f start end value base-buffer))))))))))))
 
 (defun chezmoi-template--funcall-over-display-properties (f start buffer-or-name)
   "Call F on each occurrence with display property in BUFFER-OR-NAME.

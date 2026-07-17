@@ -50,6 +50,35 @@
       (chezmoi-template--activate-go-template-mode)
       (should (eq major-mode 'go-template-ts-mode)))))
 
+(ert-deftest chezmoi-template-uses-treesit-expression-spans ()
+  (skip-unless (treesit-ready-p 'gotmpl))
+  (with-temp-buffer
+    (insert "{{ .chezmoi.os }}\n")
+    (go-template-ts-mode)
+    (let ((spans (chezmoi-template--treesit-expression-spans)))
+      (should (= (length spans) 1))
+      (should (equal (buffer-substring-no-properties
+                      (caar spans) (cdar spans))
+                     "{{ .chezmoi.os }}")))))
+
+(ert-deftest chezmoi-template-uses-treesit-in-polymode ()
+  (skip-unless (treesit-ready-p 'gotmpl))
+  (with-temp-buffer
+    (setq buffer-file-name "/tmp/config.sh.tmpl")
+    (insert "echo {{ .chezmoi.os }}\n")
+    (poly-any-go-template-mode)
+    (let (expressions)
+      (cl-letf (((symbol-function 'chezmoi-template-execute)
+                 (lambda (_) "darwin")))
+        (chezmoi-template--funcall-over-matches
+         (lambda (start end value buffer)
+           (push (list (with-current-buffer buffer
+                         (buffer-substring-no-properties start end))
+                       value)
+                 expressions))
+         (current-buffer)))
+      (should (equal expressions '(("{{ .chezmoi.os }}" "darwin")))))))
+
 (ert-deftest chezmoi-does-not-activate-template-polymode-for-nontemplate ()
   (with-temp-buffer
     (setq buffer-file-name "/tmp/chezmoi/run.sh")
