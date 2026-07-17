@@ -2,8 +2,8 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.3.0
-;; Package-Requires: ((emacs "29.1") (magit "3.0.0") (chezmoi "1.3.0"))
+;; Version: 1.3.1
+;; Package-Requires: ((emacs "29.1") (magit "3.0.0") (chezmoi "1.3.1"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
 ;; Keywords: vc
 
@@ -37,7 +37,7 @@
 (defun chezmoi-magit-status ()
   "Show the status of the chezmoi source repository."
   (interactive)
-  (magit-status-setup-buffer (cl-first (chezmoi--dispatch "source-path"))))
+  (magit-status-setup-buffer (cl-first (chezmoi--dispatch '("source-path")))))
 
 (provide 'chezmoi-magit)
 

@@ -2,7 +2,7 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.3.0
+;; Version: 1.3.1
 ;; Package-Requires: ((emacs "29.1") (poly-any-go-template "0.1.0"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
 ;; Keywords: vc
@@ -78,10 +78,10 @@ This is called by `chezmoi-mode' before template display is initialized."
   "Regex for splitting keys.")
 
 (defun chezmoi-template-execute (template)
-  "Convert a TEMPLATE string using chezmoi'."
-  (thread-first "%s execute-template %s"
-                (format chezmoi-command (shell-quote-argument template))
-                shell-command-to-string))
+  "Convert TEMPLATE using chezmoi and return its output."
+  (with-temp-buffer
+    (call-process chezmoi-command nil t nil "execute-template" template)
+    (buffer-string)))
 
 (defun chezmoi-template--selector-node-at-point ()
   "Return the Go template selector node at point, if any."

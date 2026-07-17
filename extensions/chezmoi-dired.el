@@ -2,8 +2,8 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.3.0
-;; Package-Requires: ((emacs "29.1") (chezmoi "1.3.0"))
+;; Version: 1.3.1
+;; Package-Requires: ((emacs "29.1") (chezmoi "1.3.1"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
 ;; Keywords: vc
 
@@ -38,7 +38,7 @@
   "Add files marked in Dired to source state."
   (interactive)
   (dolist (file (dired-get-marked-files))
-    (shell-command (concat chezmoi-command " add " (shell-quote-argument file)))))
+    (call-process chezmoi-command nil nil nil "add" file)))
 
 (provide 'chezmoi-dired)
 ;;; chezmoi-dired.el ends here

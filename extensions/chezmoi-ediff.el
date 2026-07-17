@@ -2,8 +2,8 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.3.0
-;; Package-Requires: ((emacs "29.1") (chezmoi "1.3.0"))
+;; Version: 1.3.1
+;; Package-Requires: ((emacs "29.1") (chezmoi "1.3.1"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
 ;; Keywords: vc
 
@@ -76,14 +76,17 @@ N, BUF-TYPE, CTRL-BUF, START, and END are all passed to `ediff'."
                  #'chezmoi-ediff--ediff-get-region-contents))
 
 (defun chezmoi--get-ancestor (source-file)
-  "Create a temp file for the source file at git HEAD ."
-  (let* ((relative (substring source-file (length chezmoi-root)))
-         (rev (substring (shell-command-to-string "git rev-parse --short HEAD") 0 -1))
+  "Create a temp file for SOURCE-FILE at git HEAD."
+  (let* ((relative (file-relative-name source-file chezmoi-root))
+         (rev (with-temp-buffer
+                (let ((default-directory chezmoi-root))
+                  (call-process "git" nil t nil "rev-parse" "--short" "HEAD"))
+                (string-trim (buffer-string))))
          (temp-name (expand-file-name relative (expand-file-name rev temporary-file-directory))))
     (make-directory (file-name-directory temp-name) t)
     (with-temp-file temp-name
-      (shell-command (concat "git show " (shell-quote-argument (concat rev ":" relative)))
-                     (current-buffer)))
+      (let ((default-directory chezmoi-root))
+        (call-process "git" nil t nil "show" (concat rev ":" relative))))
     temp-name))
 
 ;;;###autoload
@@ -115,12 +118,13 @@ Return the new buffer."
   (unless (chezmoi-template-file-p template-file)
     (error "File: %s is not a chezmoi template file" template-file))
   (let ((buf (get-buffer-create (make-temp-name template-file))))
-        (shell-command (format "%s execute-template %s"
-                       chezmoi-command
-                       (shell-quote-argument
-                        (with-temp-buffer (insert-file-contents template-file) (buffer-string))))
-               buf)
-        buf))
+    (with-temp-buffer
+      (insert-file-contents template-file)
+      (let ((output (chezmoi-template-execute (buffer-string))))
+        (with-current-buffer buf
+          (erase-buffer)
+          (insert output))))
+    buf))
 
 ;;;###autoload
 (defun chezmoi-ediff (file)
@@ -142,11 +146,9 @@ Note: Does not run =chezmoi merge=."
                (chezmoi-template-file-p source-file))
           (progn (let ((temp (make-temp-file (file-name-nondirectory file))))
                    (with-temp-file temp
-                     (shell-command (format "%s execute-template %s"
-                                            chezmoi-command
-                                            (shell-quote-argument
-                                             (with-temp-buffer (insert-file-contents source-file) (buffer-string))))
-                                    (current-buffer)))
+                     (insert (with-temp-buffer
+                               (insert-file-contents source-file)
+                               (chezmoi-template-execute (buffer-string)))))
                 (ediff3 temp file source-file)))
       (advice-add 'ediff-get-region-contents :override #'chezmoi-ediff--ediff-get-region-contents)
       (setq chezmoi-ediff--source-file source-file)

@@ -2,7 +2,7 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.3.0
+;; Version: 1.3.1
 ;; Package-Requires: ((emacs "29.1") (poly-any-go-template "0.1.0")
 ;;                     (transient "0.4.0"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
@@ -57,20 +57,23 @@
      ,@body))
 
 (defun chezmoi--dispatch (args)
-  "Dispatch chezmoi command to shell, passing ARGS."
+  "Run chezmoi with argument list ARGS and return output lines.
+Return nil when the command exits unsuccessfully or reports an error."
   (let ((b (get-buffer-create "*chezmoi*")))
     (with-current-buffer b
       (erase-buffer)
-      (chezmoi--locally
-       (shell-command (format "%s %s" chezmoi-command args) b))
-      (let ((s (buffer-string)))
-	(let ((result (split-string (string-trim s) "\n")))
-	  (unless (cl-some (lambda (l) (string-match-p chezmoi-command-error-regex l)) result)
-	    result))))))
+      (let ((status (chezmoi--locally
+                     (apply #'call-process chezmoi-command nil b nil args))))
+        (let ((result (split-string (string-trim (buffer-string)) "\n")))
+          (unless (or (not (zerop status))
+                      (cl-some (lambda (line)
+                                 (string-match-p chezmoi-command-error-regex line))
+                               result))
+            result))))))
 
 (defun chezmoi-managed ()
   "List all files and directories managed by chezmoi."
-  (thread-last "managed"
+  (thread-last '("managed")
 	       chezmoi--dispatch
 	       (cl-map 'list (lambda (file) (concat "~/" file)))))
 
@@ -86,7 +89,7 @@
    (list (chezmoi--completing-read
           "Select a script to edit: "
           (thread-last
-            "managed -i scripts -p source-absolute"
+            '("managed" "-i" "scripts" "-p" "source-absolute")
             chezmoi--dispatch
             (cl-map 'list #'abbreviate-file-name))
           'project-file)))
@@ -145,7 +148,8 @@ If ARG is non-nil, switch to the diff-buffer."
   (let ((b (get-buffer-create "*chezmoi-diff*")))
     (with-current-buffer b
       (erase-buffer)
-      (chezmoi--locally (shell-command (concat chezmoi-command " diff --use-builtin-diff") b)))
+      (chezmoi--locally
+       (call-process chezmoi-command nil b nil "diff" "--use-builtin-diff")))
     (unless arg
       (switch-to-buffer b)
       (diff-mode)
@@ -163,14 +167,14 @@ Requires chezmoi to be configured with an external mergetool (emacs, perhaps?)."
                    (chezmoi-changed-files)
                    'project-file)))
   (when (file-exists-p file)
-    (push (start-process-shell-command "chezmoi" nil (concat "chezmoi merge " file))
+    (push (start-process "chezmoi-merge" nil chezmoi-command "merge" file)
           chezmoi--merge-procs)))
 
 ;;;###autoload
 (defun chezmoi-merge-all ()
   "Call `chezmoi merge-all'."
   (interactive)
-  (push (start-process-shell-command "chezmoi" nil "chezmoi merge-all")
+  (push (start-process "chezmoi-merge-all" nil chezmoi-command "merge-all")
         chezmoi--merge-procs))
 
 (defun chezmoi-merge-quit ()
@@ -185,7 +189,7 @@ Requires chezmoi to be configured with an external mergetool (emacs, perhaps?)."
   (let ((files '()))
     (with-temp-buffer
 
-    (call-process-shell-command "chezmoi status" nil (current-buffer))
+    (call-process chezmoi-command nil (current-buffer) nil "status")
     (while (re-search-backward "^[[:space:]|ADMR][ADMR] \\(.*\\)" nil t)
               (push (concat "~/" (match-string 1)) files))
       files)))
@@ -199,22 +203,22 @@ Requires chezmoi to be configured with an external mergetool (emacs, perhaps?)."
 
 (defun chezmoi-version ()
   "Get version number of chezmoi."
-  (let* ((s (cl-first (chezmoi--dispatch "--version")))
+  (let* ((s (cl-first (chezmoi--dispatch '("--version"))))
 	 (dev-re "\\(version \\(dev\\)\\)")
 	 (v-re " \\(v\\(\\([0-9]+\\.\\)?\\([0-9]+\\.\\)?\\(\\*\\|[0-9]+\\)\\)\\)")
 	 (re (concat dev-re "\\|" v-re)))
-    (when (string-match re s)
+    (when (and s (string-match re s))
       (or (match-string 4 s)
 	  (match-string 2 s)))))
 
 (defun chezmoi-get-data ()
   "Return chezmoi data."
-  (json-parse-string (apply #'concat (chezmoi--dispatch "data"))))
+  (json-parse-string (apply #'concat (chezmoi--dispatch '("data")))))
 
 (defun chezmoi-get-config()
   (let ((v (chezmoi-version)))
     (when (or (and v (string-match-p "^[0-9]" v) (version<= "2.27.0" v)) (string= "dev" v))
-      (let ((config-string (apply #'concat (chezmoi--dispatch "dump-config"))))
+      (let ((config-string (apply #'concat (chezmoi--dispatch '("dump-config")))))
 	(json-parse-string config-string
 			   :array-type 'list
 			   :null-object nil)))))
@@ -274,19 +278,13 @@ Requires chezmoi to be configured with an external mergetool (emacs, perhaps?)."
   (unless (chezmoi-target-file-p file)
     (let ((v (chezmoi-version)))
       (if (or (and v (string-match-p "^[0-9]" v) (version<= "2.12.0" v)) (string= "dev" v))
-	  (thread-last (when file (shell-quote-argument file))
-		       (format "target-path %s")
-		       chezmoi--dispatch
-		       cl-first)
+	  (cl-first (chezmoi--dispatch (list "target-path" file)))
 	(chezmoi--manual-target-file file)))))
 
 (defun chezmoi-source-file (file)
   "Return the source file corresponding to FILE."
   (when (chezmoi-target-file-p file)
-    (thread-last (when file (shell-quote-argument file))
-		 (format "source-path %s")
-		 chezmoi--dispatch
-		 cl-first)))
+    (cl-first (chezmoi--dispatch (list "source-path" file)))))
 
 ;;;###autoload
 (defun chezmoi-write (&optional file arg)
@@ -316,10 +314,9 @@ With prefix ARG, save the source buffer."
       ;; File is in source state
       (let* ((source-file file)
              (target-file (chezmoi-target-file source-file))
-             (cmd (format "apply %s%s"
-			  (shell-quote-argument target-file)
-			  (if arg " --force" ""))))
-        (if (chezmoi--dispatch cmd)
+             (args (append (list "apply" target-file)
+			       (when arg (list "--force")))))
+	    (if (chezmoi--dispatch args)
 	    (progn
               (message "Wrote target: %s" target-file)
               target-file)

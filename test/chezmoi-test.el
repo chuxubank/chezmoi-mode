@@ -10,6 +10,11 @@
 (ert-deftest chezmoi-find-scripts-is-command ()
   (should (commandp #'chezmoi-find-scripts)))
 
+(ert-deftest chezmoi-dispatch-passes-arguments-without-shell-quoting ()
+  (let ((chezmoi-command "printf"))
+    (should (equal (chezmoi--dispatch '("%s" "hello world"))
+                   '("hello world")))))
+
 (ert-deftest chezmoi-transient-is-command ()
   (should (commandp #'chezmoi-transient)))
 
