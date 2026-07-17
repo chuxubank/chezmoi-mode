@@ -2,9 +2,9 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.1.0
-;; Package-Requires: ((emacs "26.1"))
-;; Homepage: http://www.github.com/tuh8888/chezmoi.el
+;; Version: 1.2.0
+;; Package-Requires: ((emacs "29.1") (poly-any-go-template "0.1.0"))
+;; Homepage: https://github.com/chuxubank/chezmoi.el
 ;; Keywords: vc
 
 
@@ -37,6 +37,18 @@
 ;;; Code:
 (require 'subr-x)
 (require 'chezmoi-core)
+(require 'poly-any-go-template)
+
+(defun chezmoi-template--activate-go-template-mode ()
+  "Use Go-template polymode for Chezmoi template source buffers.
+The current major mode remains the host mode inferred from the target file."
+  (when (and (bound-and-true-p chezmoi-mode)
+             buffer-file-name
+             (string-suffix-p ".tmpl" buffer-file-name)
+             (not (bound-and-true-p polymode-mode)))
+    (poly-any-go-template-mode)))
+
+(add-hook 'chezmoi-mode-hook #'chezmoi-template--activate-go-template-mode)
 
 (defcustom chezmoi-template-display-p nil
   "Whether to display templates."

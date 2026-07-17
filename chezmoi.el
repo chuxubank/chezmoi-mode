@@ -39,7 +39,6 @@
 (require 'chezmoi-template)
 (require 'cl-lib)
 (require 'custom)
-(require 'poly-any-go-template)
 (require 'shell)
 (require 'subr-x)
 
@@ -301,17 +300,6 @@ PROMPT, CHOICES, and CATEGORY are passed to `complete-with-action'."
   (let ((ret))
         (dolist (i chezmoi-use-template-source-mode-regex ret)
           (setq ret (or ret (string-match i file))))))
-
-(defun chezmoi--activate-template-polymode ()
-  "Activate Go-template polymode for a Chezmoi source buffer.
-The host mode is selected from the filename before this hook runs, so
-`poly-any-go-template-mode' can preserve that mode for the template body."
-  (when (and chezmoi-mode
-             (chezmoi-template-file-p buffer-file-name)
-             (not (bound-and-true-p polymode-mode)))
-    (poly-any-go-template-mode)))
-
-(add-hook 'chezmoi-mode-hook #'chezmoi--activate-template-polymode)
 
 ;;;###autoload
 (defun chezmoi-find (file)

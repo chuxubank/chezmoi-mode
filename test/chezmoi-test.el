@@ -19,7 +19,7 @@
           (activated nil))
       (cl-letf (((symbol-function 'poly-any-go-template-mode)
                  (lambda () (setq activated t))))
-        (chezmoi--activate-template-polymode))
+        (chezmoi-template--activate-go-template-mode))
       (should activated))))
 
 (ert-deftest chezmoi-does-not-activate-template-polymode-for-nontemplate ()
@@ -29,7 +29,7 @@
           (activated nil))
       (cl-letf (((symbol-function 'poly-any-go-template-mode)
                  (lambda () (setq activated t))))
-        (chezmoi--activate-template-polymode))
+        (chezmoi-template--activate-go-template-mode))
       (should-not activated))))
 
 (provide 'chezmoi-test)
