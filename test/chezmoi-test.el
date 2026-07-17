@@ -9,6 +9,9 @@
 (ert-deftest chezmoi-find-scripts-is-command ()
   (should (commandp #'chezmoi-find-scripts)))
 
+(ert-deftest chezmoi-transient-is-command ()
+  (should (commandp #'chezmoi-transient)))
+
 (ert-deftest chezmoi-template-file-p-recognizes-template-sources ()
   (let ((chezmoi-root "/tmp/chezmoi/"))
     (should (chezmoi-template-file-p "/tmp/chezmoi/run.sh.tmpl"))

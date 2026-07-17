@@ -3,7 +3,8 @@
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
 ;; Version: 1.2.1
-;; Package-Requires: ((emacs "29.1") (poly-any-go-template "0.1.0"))
+;; Package-Requires: ((emacs "29.1") (poly-any-go-template "0.1.0")
+;;                     (transient "0.4.0"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
 ;; Keywords: vc
 
@@ -41,6 +42,7 @@
 (require 'custom)
 (require 'shell)
 (require 'subr-x)
+(require 'transient)
 
 (defmacro chezmoi--locally (&rest body)
   "Ensure BODY is run with a local `default-directory'."
@@ -82,6 +84,26 @@
             (cl-map 'list #'abbreviate-file-name))
           'project-file)))
   (find-file script))
+
+;;;###autoload
+(transient-define-prefix chezmoi-transient ()
+  "Manage Chezmoi source and target files."
+  [
+   ["Files"
+    ("f" "Find" chezmoi-find)
+    ("F" "Find script" chezmoi-find-scripts)
+    ("o" "Open other" chezmoi-open-other)]
+   ["Sync"
+    ("w" "Write" chezmoi-write)
+    ("s" "Sync files" chezmoi-sync-files)
+    ("d" "Diff" chezmoi-diff)]
+   ["Merge"
+    ("m" "Merge" chezmoi-merge)
+    ("M" "Merge all" chezmoi-merge-all)
+    ("q" "Quit merges" chezmoi-merge-quit)]
+   ["Template"
+    ("t" "Toggle display" chezmoi-template-buffer-display)
+    ("c" "Toggle mode" chezmoi-mode)]])
 
 (defun chezmoi-target-file-p (file)
   "Return non-nil if FILE is in the target state."
