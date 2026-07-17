@@ -2,7 +2,7 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.2.0
+;; Version: 1.2.1
 ;; Package-Requires: ((emacs "29.1") (poly-any-go-template "0.1.0"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
 ;; Keywords: vc
@@ -69,6 +69,19 @@
   "List only files managed by chezmoi."
   (thread-last (chezmoi-managed)
 	       (cl-remove-if #'file-directory-p)))
+
+;;;###autoload
+(defun chezmoi-find-scripts (script)
+  "Edit a source SCRIPT managed by chezmoi."
+  (interactive
+   (list (chezmoi--completing-read
+          "Select a script to edit: "
+          (thread-last
+            "managed -i scripts -p source-absolute"
+            chezmoi--dispatch
+            (cl-map 'list #'abbreviate-file-name))
+          'project-file)))
+  (find-file script))
 
 (defun chezmoi-target-file-p (file)
   "Return non-nil if FILE is in the target state."
