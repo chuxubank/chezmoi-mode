@@ -92,7 +92,7 @@ Does not check if the file is managed by chezmoi."
   (when-let ((source-file (if (chezmoi-source-file-p file)
                               file
                             (chezmoi-source-file file))))
-    (string-suffix-p ".tmpl" source-file)))
+    (chezmoi-template-source-file-p source-file)))
 
 ;;;###autoload
 (defun chezmoi-diff (arg)

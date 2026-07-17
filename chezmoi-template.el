@@ -44,7 +44,7 @@
 The current major mode remains the host mode inferred from the target file."
   (when (and (bound-and-true-p chezmoi-mode)
              buffer-file-name
-             (string-suffix-p ".tmpl" buffer-file-name)
+             (chezmoi-template-source-file-p buffer-file-name)
              (not (bound-and-true-p polymode-mode)))
     (poly-any-go-template-mode)))
 

@@ -11,8 +11,9 @@ The recording above demonstrates editing a chezmoi template with source file on 
 * Installation
   Clone this repo or use a package manager.
 
-  Go-template source files use ~poly-any-go-template~ while retaining the
-  target file's host mode. Install it from [[https://github.com/chuxubank/poly-any-template][poly-any-template]] alongside this package.
+  Go-template source files ending in ~.tmpl~ or beginning with ~modify_~ use
+  ~poly-any-go-template~ while retaining the target file's host mode. Install
+  it from [[https://github.com/chuxubank/poly-any-template][poly-any-template]] alongside this package.
 
   #+begin_src emacs-lisp :noweb yes
 (use-package chezmoi)

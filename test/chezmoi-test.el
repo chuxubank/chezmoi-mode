@@ -6,14 +6,15 @@
 (require 'ert)
 (require 'chezmoi)
 
-(ert-deftest chezmoi-template-file-p-requires-tmpl-suffix ()
+(ert-deftest chezmoi-template-file-p-recognizes-template-sources ()
   (let ((chezmoi-root "/tmp/chezmoi/"))
     (should (chezmoi-template-file-p "/tmp/chezmoi/run.sh.tmpl"))
+    (should (chezmoi-template-file-p "/tmp/chezmoi/modify_dot_config"))
     (should-not (chezmoi-template-file-p "/tmp/chezmoi/run.sh.tmpl.bak"))))
 
 (ert-deftest chezmoi-activates-template-polymode-for-source-buffer ()
   (with-temp-buffer
-    (setq buffer-file-name "/tmp/chezmoi/run.sh.tmpl")
+    (setq buffer-file-name "/tmp/chezmoi/modify_dot_config")
     (let ((chezmoi-root "/tmp/chezmoi/")
           (chezmoi-mode t)
           (activated nil))

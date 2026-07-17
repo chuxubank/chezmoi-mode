@@ -93,6 +93,14 @@ If the target has been changed, it will be overwritten."
     ".tmpl")
   "Source state attribute suffixes.")
 
+(defun chezmoi-template-source-file-p (file)
+  "Return non-nil when FILE contains a Go template.
+Chezmoi marks templates with a `.tmpl' suffix or a `modify_' prefix."
+  (when file
+    (let ((name (file-name-nondirectory file)))
+      (or (string-suffix-p ".tmpl" name)
+          (string-prefix-p "modify_" name)))))
+
 (defun chezmoi--mode-from-path ()
   "Activate `chezmoi-mode' in source files based on their path"
   (when (string-match chezmoi-root (buffer-file-name))
