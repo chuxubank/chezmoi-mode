@@ -2,7 +2,7 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.2.0
+;; Version: 1.2.1
 ;; Package-Requires: ((emacs "29.1") (poly-any-go-template "0.1.0"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
 ;; Keywords: vc
@@ -41,14 +41,13 @@
 
 (defun chezmoi-template--activate-go-template-mode ()
   "Use Go-template polymode for Chezmoi template source buffers.
-The current major mode remains the host mode inferred from the target file."
+The current major mode remains the host mode inferred from the target file.
+This is called by `chezmoi-mode' before its legacy font-lock keywords run."
   (when (and (bound-and-true-p chezmoi-mode)
              buffer-file-name
              (chezmoi-template-source-file-p buffer-file-name)
              (not (bound-and-true-p polymode-mode)))
     (poly-any-go-template-mode)))
-
-(add-hook 'chezmoi-mode-hook #'chezmoi-template--activate-go-template-mode)
 
 (defcustom chezmoi-template-display-p nil
   "Whether to display templates."

@@ -12,6 +12,18 @@
 (ert-deftest chezmoi-transient-is-command ()
   (should (commandp #'chezmoi-transient)))
 
+(ert-deftest chezmoi-mode-initializes-template-module ()
+  (with-temp-buffer
+    (setq buffer-file-name "/tmp/chezmoi/run.sh.tmpl")
+    (let ((activated nil))
+      (cl-letf (((symbol-function 'chezmoi-changed-p) (lambda (&rest _) nil))
+                ((symbol-function 'chezmoi-template--activate-go-template-mode)
+                 (lambda () (setq activated t)))
+                ((symbol-function 'chezmoi-template-buffer-display)
+                 (lambda (&rest _) nil)))
+        (chezmoi-mode 1))
+      (should activated))))
+
 (ert-deftest chezmoi-template-file-p-recognizes-template-sources ()
   (let ((chezmoi-root "/tmp/chezmoi/"))
     (should (chezmoi-template-file-p "/tmp/chezmoi/run.sh.tmpl"))

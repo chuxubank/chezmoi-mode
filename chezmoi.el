@@ -2,7 +2,7 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.2.1
+;; Version: 1.2.2
 ;; Package-Requires: ((emacs "29.1") (poly-any-go-template "0.1.0")
 ;;                     (transient "0.4.0"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
@@ -408,8 +408,10 @@ Prefix ARG is passed to `chezmoi-write'."
 	(when (or chezmoi-mode-overwrite-destination (chezmoi-changed-p (buffer-file-name)))
 	  (add-hook 'after-save-hook #'chezmoi-write 0 t))
 	(add-hook 'after-change-functions #'chezmoi-template--after-change nil 1)
+	(chezmoi-template--activate-go-template-mode)
 
-	(font-lock-add-keywords nil (chezmoi-font-lock-keywords) 'append)
+	(unless (bound-and-true-p polymode-mode)
+	  (font-lock-add-keywords nil (chezmoi-font-lock-keywords) 'append))
 	(chezmoi-template-buffer-display t)
 	(font-lock-ensure (point-min) (point-max)))
     (progn
