@@ -2,7 +2,7 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.3.1
+;; Version: 1.4.0
 ;; Package-Requires: ((emacs "29.1") (poly-any-go-template "0.1.0")
 ;;                     (transient "0.4.0"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
@@ -50,6 +50,7 @@
 (declare-function chezmoi-template--after-change "chezmoi-template" (&rest _))
 (declare-function chezmoi-template-buffer-display "chezmoi-template" (&optional display-p start buffer-or-name))
 (declare-function chezmoi-template-source-file-p "chezmoi-core" (file))
+(declare-function chezmoi-capf "chezmoi-template" ())
 
 (defmacro chezmoi--locally (&rest body)
   "Ensure BODY is run with a local `default-directory'."
@@ -408,8 +409,9 @@ Prefix ARG is passed to `chezmoi-write'."
       (progn
 	(when (or chezmoi-mode-overwrite-destination (chezmoi-changed-p (buffer-file-name)))
 	  (add-hook 'after-save-hook #'chezmoi-write 0 t))
-	(add-hook 'after-change-functions #'chezmoi-template--after-change nil 1)
 	(chezmoi-template--activate-go-template-mode)
+	(add-hook 'after-change-functions #'chezmoi-template--after-change nil 1)
+	(add-hook 'completion-at-point-functions #'chezmoi-capf nil t)
 	(chezmoi-template-buffer-display t)
 	(font-lock-ensure (point-min) (point-max)))
     (progn
@@ -417,6 +419,7 @@ Prefix ARG is passed to `chezmoi-write'."
 
       (remove-hook 'after-save-hook #'chezmoi-write t)
       (remove-hook 'after-change-functions #'chezmoi-template--after-change t)
+      (remove-hook 'completion-at-point-functions #'chezmoi-capf t)
       (font-lock-ensure (point-min) (point-max)))))
 
 (provide 'chezmoi)

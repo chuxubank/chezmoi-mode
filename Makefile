@@ -4,9 +4,9 @@ POLY_PATH ?=
 GO_TEMPLATE_PATH ?=
 LOAD_PATH = -L . -L extensions -L test $(foreach path,$(POLYMODE_PATH) $(POLY_PATH) $(GO_TEMPLATE_PATH),-L $(path))
 SOURCES = chezmoi-core.el chezmoi-template.el chezmoi.el
-EXTENSIONS = extensions/chezmoi-age.el extensions/chezmoi-cape.el \
-	extensions/chezmoi-dired.el extensions/chezmoi-ediff.el
-OPTIONAL_EXTENSIONS = extensions/chezmoi-company.el extensions/chezmoi-magit.el
+EXTENSIONS = extensions/chezmoi-age.el extensions/chezmoi-dired.el \
+	extensions/chezmoi-ediff.el
+OPTIONAL_EXTENSIONS = extensions/chezmoi-magit.el
 
 PACKAGE_SETUP = \
 	--eval "(require 'package)" \

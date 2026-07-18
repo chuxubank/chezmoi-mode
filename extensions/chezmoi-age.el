@@ -2,8 +2,8 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.3.1
-;; Package-Requires: ((emacs "29.1") (age "0.1.4") (chezmoi "1.3.1"))
+;; Version: 1.4.0
+;; Package-Requires: ((emacs "29.1") (age "0.1.4") (chezmoi "1.4.0"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
 ;; Keywords: vc
 

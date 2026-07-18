@@ -5,7 +5,6 @@
 (require 'cl-lib)
 (require 'ert)
 (require 'chezmoi)
-(require 'chezmoi-cape)
 
 (ert-deftest chezmoi-find-scripts-is-command ()
   (should (commandp #'chezmoi-find-scripts)))
@@ -27,8 +26,21 @@
                  (lambda () (setq activated t)))
                 ((symbol-function 'chezmoi-template-buffer-display)
                  (lambda (&rest _) nil)))
-        (chezmoi-mode 1))
+        (chezmoi-mode 1)
+        (should (memq #'chezmoi-capf completion-at-point-functions))
+        (chezmoi-mode -1)
+        (should-not (memq #'chezmoi-capf completion-at-point-functions)))
       (should activated))))
+
+(ert-deftest chezmoi-mode-registers-capf-after-major-mode-change ()
+  (with-temp-buffer
+    (setq buffer-file-name "/tmp/chezmoi/modify_dot_config")
+    (let ((chezmoi-root "/tmp/chezmoi/"))
+      (cl-letf (((symbol-function 'chezmoi-changed-p) (lambda (&rest _) nil)))
+        (chezmoi-mode 1))
+      (should chezmoi-mode)
+      (should (eq major-mode 'go-template-ts-mode))
+      (should (memq #'chezmoi-capf completion-at-point-functions)))))
 
 (ert-deftest chezmoi-template-file-p-recognizes-template-sources ()
   (let ((chezmoi-root "/tmp/chezmoi/"))
@@ -58,8 +70,8 @@
     (setq buffer-file-name "/tmp/chezmoi/modify_dot_config")
     (sh-mode)
     (let ((chezmoi-root "/tmp/chezmoi/")
-          (chezmoi-mode t)
           (activated nil))
+      (setq-local chezmoi-mode t)
       (cl-letf (((symbol-function 'poly-any-go-template-mode)
                  (lambda () (setq activated t))))
         (chezmoi-template--activate-go-template-mode))
@@ -68,8 +80,8 @@
 (ert-deftest chezmoi-uses-go-template-mode-for-plain-template ()
   (with-temp-buffer
     (setq buffer-file-name "/tmp/chezmoi/modify_dot_config")
-    (let ((chezmoi-root "/tmp/chezmoi/")
-          (chezmoi-mode t))
+    (let ((chezmoi-root "/tmp/chezmoi/"))
+      (setq-local chezmoi-mode t)
       (chezmoi-template--activate-go-template-mode)
       (should (eq major-mode 'go-template-ts-mode)))))
 

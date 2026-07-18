@@ -2,7 +2,7 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.3.1
+;; Version: 1.4.0
 ;; Package-Requires: ((emacs "29.1") (poly-any-go-template "0.1.0"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
 ;; Keywords: vc
@@ -42,6 +42,7 @@
 (require 'poly-any-go-template)
 
 (declare-function chezmoi-template-source-file-p "chezmoi-core" (file))
+(declare-function chezmoi-get-data "chezmoi" ())
 
 (defun chezmoi-template--activate-go-template-mode ()
   "Use Go-template polymode for Chezmoi template source buffers.
@@ -55,7 +56,8 @@ This is called by `chezmoi-mode' before template display is initialized."
           ((memq major-mode '(fundamental-mode text-mode))
            (go-template-ts-mode))
           (t
-           (poly-any-go-template-mode)))))
+           (poly-any-go-template-mode)))
+    (setq-local chezmoi-mode t)))
 
 (defcustom chezmoi-template-display-p nil
   "Whether to display templates."
@@ -93,6 +95,47 @@ This is called by `chezmoi-mode' before template display is initialized."
                               "selector_expression")))
         (setq node (treesit-node-parent node)))
       node)))
+
+(defvar chezmoi-template--completion-properties
+  (list :annotation-function (lambda (_) " Keyword")
+        :company-kind (lambda (_) 'keyword)
+        :exclusive 'no)
+  "Extra properties returned by `chezmoi-capf'.")
+
+(defun chezmoi-template--completion-candidates (selector)
+  "Return completion candidates for SELECTOR from `chezmoi-get-data'."
+  (let* ((keys (thread-last chezmoi-template-key-regex
+                            (split-string selector)
+                            butlast
+                            (remove "")))
+         (hashget (lambda (data key)
+                    (when (hash-table-p data)
+                      (gethash key data))))
+         (data (cl-reduce hashget keys
+                          :initial-value (chezmoi-get-data))))
+    (cond ((hash-table-p data) (hash-table-keys data))
+          ((stringp data) (list data))
+          (t nil))))
+
+(defun chezmoi-template--completion-bounds (node)
+  "Return completion bounds for the final segment of selector NODE."
+  (save-excursion
+    (goto-char (min (point) (treesit-node-end node)))
+    (skip-syntax-backward "w_" (treesit-node-start node))
+    (cons (point) (treesit-node-end node))))
+
+(defun chezmoi-capf ()
+  "Complete the Chezmoi template selector at point."
+  (when-let ((node (chezmoi-template--selector-node-at-point)))
+    (let* ((bounds (chezmoi-template--completion-bounds node))
+           (beg (car bounds))
+           (end (cdr bounds))
+           (selector (treesit-node-text node t))
+           (candidates (chezmoi-template--completion-candidates selector)))
+      `(,beg ,end
+             ,(completion-table-dynamic (lambda (_) candidates))
+             :category chezmoi-template
+             ,@chezmoi-template--completion-properties))))
 
 (defun chezmoi-template--treesit-expression-spans (&optional minimum maximum)
   "Return simple Go template expression spans in the current buffer.

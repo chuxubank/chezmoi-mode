@@ -28,8 +28,8 @@ make
 make compile-extensions
   #+end_src
 
-  ~compile-all-extensions~ additionally checks the optional Company and Magit
-  integrations when those packages are installed.
+  ~compile-all-extensions~ additionally checks the optional Magit integration
+  when Magit is installed.
 
   Add keybindings to some functions. Or call using ~M-x <cmd>~.
 
@@ -76,27 +76,10 @@ make compile-extensions
    Emacs has a lovely package called ~ediff~ for comparing differences between files which is perfect for when the source and target states get out of sync. Quickly resolve inconsistencies between source and target states using ~chezmoi-ediff~. Or view the raw diff using ~chezmoi-diff~ if you prefer. Pipe this into your own diff workflow using ~(chezmoi-diff 1)~ to give raw diff input to some other diff management tool.
 
 
-** Company
-
-   Company integration is provided through ~chezmoi-company-backend~. Simply add it to to ~company-backends~. This will show completions for when editing template variables.
-
-   #+begin_src emacs-lisp :noweb yes
-(require 'chezmoi-company)
-(add-hook 'chezmoi-mode-hook #'(lambda () (if chezmoi-mode
-                                              (add-to-list 'company-backends 'chezmoi-company-backend)
-                                            (delete 'chezmoi-company-backend 'company-backends))))
-   #+end_src
-
 ** Completion at point
-   Standard completion-at-point integration is provided through ~chezmoi-capf~.
-   It works with completion UIs such as Corfu and Company without depending on
-   Cape internals. Add it to ~completion-at-point-functions~ to complete
-   template variables.
-
-   #+begin_src emacs-lisp :noweb yes
-(require 'chezmoi-cape)
-(add-to-list 'completion-at-point-functions #'chezmoi-capf)
-   #+end_src
+   ~chezmoi-mode~ automatically installs ~chezmoi-capf~ buffer-locally. It uses
+   Emacs' standard completion-at-point protocol and works with completion UIs
+   such as Corfu and Company through ~company-capf~.
 
 ** Dired
 
@@ -208,11 +191,6 @@ make compile-extensions
 
 
     (setq chezmoi-template-display-p t) ;; Display template values in all source buffers.
-
-    (require 'chezmoi-company)
-    (add-hook 'chezmoi-mode-hook #'(lambda () (if chezmoi-mode
-                                             (add-to-list 'company-backends 'chezmoi-company-backend)
-                                           (setq company-backends (delete 'chezmoi-company-backend company-backends)))))
 
     ;; Turn off ligatures cuz they look bad.
     (add-hook 'chezmoi-mode-hook #'(lambda () (ligature-mode (if chezmoi-mode 0 1))))
