@@ -2,7 +2,7 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.4.2
+;; Version: 1.4.3
 ;; Package-Requires: ((emacs "29.1") (poly-any-go-template "0.1.0")
 ;;                     (transient "0.4.0"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
@@ -74,9 +74,9 @@ Return nil when the command exits unsuccessfully or reports an error."
 
 (defun chezmoi-managed ()
   "List all files and directories managed by chezmoi."
-  (thread-last '("managed")
+  (thread-last '("managed" "-x" "externals,scripts" "-p" "absolute")
 	       chezmoi--dispatch
-	       (cl-map 'list (lambda (file) (concat "~/" file)))))
+	       (cl-map 'list #'abbreviate-file-name)))
 
 (defun chezmoi-managed-files ()
   "List only files managed by chezmoi."

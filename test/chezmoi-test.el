@@ -14,6 +14,19 @@
     (should (equal (chezmoi--dispatch '("%s" "hello world"))
                    '("hello world")))))
 
+(ert-deftest chezmoi-managed-requests-abbreviated-absolute-paths ()
+  (let ((absolute-file (expand-file-name "managed-file" "~/"))
+        dispatched-args)
+    (cl-letf (((symbol-function 'chezmoi--dispatch)
+               (lambda (args)
+                 (setq dispatched-args args)
+                 (list absolute-file))))
+      (should (equal (chezmoi-managed)
+                     (list (abbreviate-file-name absolute-file))))
+      (should (equal dispatched-args
+                     '("managed" "-x" "externals,scripts"
+                       "-p" "absolute"))))))
+
 (ert-deftest chezmoi-transient-is-command ()
   (should (commandp #'chezmoi-transient)))
 
