@@ -1,6 +1,6 @@
 EMACS ?= emacs
-GO_TEMPLATE_PATH ?=
-LOAD_PATH = -L . -L extensions -L test $(foreach path,$(GO_TEMPLATE_PATH),-L $(path))
+TEST_GO_TEMPLATE_PATH ?=
+LOAD_PATH = -L . -L extensions -L test $(foreach path,$(TEST_GO_TEMPLATE_PATH),-L $(path))
 SOURCES = chezmoi-core.el chezmoi-template.el chezmoi.el
 EXTENSIONS = extensions/chezmoi-age.el extensions/chezmoi-dired.el \
 	extensions/chezmoi-ediff.el
@@ -11,20 +11,25 @@ PACKAGE_SETUP = \
 	--eval "(package-initialize)" \
 	--eval "(setq load-path (cons \"$(CURDIR)\" (delete \"$(CURDIR)\" load-path)))" \
 	--eval "(setq load-path (cons \"$(CURDIR)/test\" (delete \"$(CURDIR)/test\" load-path)))" \
-	$(foreach path,$(GO_TEMPLATE_PATH),--eval "(setq load-path (cons \"$(path)\" (delete \"$(path)\" load-path)))")
+	$(foreach path,$(TEST_GO_TEMPLATE_PATH),--eval "(setq load-path (cons \"$(path)\" (delete \"$(path)\" load-path)))")
 
 ARCHIVES = \
 	--eval "(require 'package)" \
 	--eval "(add-to-list 'package-archives '(\"melpa\" . \"https://melpa.org/packages/\") t)" \
 	--eval "(package-initialize)"
 
-.PHONY: all install-deps compile compile-extensions compile-all-extensions test clean
+.PHONY: all install-deps install-test-deps compile compile-extensions \
+	compile-all-extensions test clean
 
 all: compile test
 
 install-deps:
 	$(EMACS) -Q --batch $(ARCHIVES) \
 		--eval "(package-refresh-contents)" \
+		--eval "(package-install 'transient)"
+
+install-test-deps: install-deps
+	$(EMACS) -Q --batch $(ARCHIVES) \
 		--eval "(unless (locate-library \"go-template-ts-mode\") (package-vc-install \"https://github.com/chuxubank/go-template-ts-mode\"))"
 
 compile:

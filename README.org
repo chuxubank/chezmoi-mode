@@ -12,9 +12,10 @@ The recording above demonstrates editing a chezmoi template with source file on 
   Clone this repo or use a package manager.
 
   Go-template source files ending in ~.tmpl~, beginning with ~modify_~, or
-  located below ~.chezmoitemplates~ use ~go-template-ts-mode~ when no host
-  mode has already been inferred.  Other template/host compositions can be
-  selected from ~chezmoi-template-mode-hook~.  The public
+  located below ~.chezmoitemplates~ can select their major mode from
+  ~chezmoi-template-mode-hook~.  When the resulting buffer has a ~gotmpl~
+  Tree-sitter parser, Chezmoi completion and template display are enabled.
+  The public
   ~chezmoi-template-normalize-host-filename~ function translates Chezmoi
   source attributes for integrations that infer a host mode from a filename.
 
@@ -33,7 +34,7 @@ The recording above demonstrates editing a chezmoi template with source file on 
   For development, install the package dependencies and run the checks with:
 
   #+begin_src shell
-make install-deps
+make install-test-deps
 make
 make compile-extensions
   #+end_src

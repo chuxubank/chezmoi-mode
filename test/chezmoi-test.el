@@ -6,8 +6,16 @@
 (require 'ert)
 (require 'chezmoi)
 
+(defconst chezmoi-test--loaded-go-template-ts-mode-p
+  (featurep 'go-template-ts-mode))
+
+(require 'go-template-ts-mode nil t)
+
 (ert-deftest chezmoi-does-not-load-poly-any-go-template ()
   (should-not (featurep 'poly-any-go-template)))
+
+(ert-deftest chezmoi-does-not-load-go-template-ts-mode ()
+  (should-not chezmoi-test--loaded-go-template-ts-mode-p))
 
 (ert-deftest chezmoi-find-scripts-is-command ()
   (should (commandp #'chezmoi-find-scripts)))
@@ -61,9 +69,12 @@
   (should (default-value 'chezmoi-template-display-p)))
 
 (ert-deftest chezmoi-mode-registers-capf-after-major-mode-change ()
+  (skip-unless (and (fboundp 'go-template-ts-mode)
+                    (treesit-ready-p 'gotmpl)))
   (with-temp-buffer
     (setq buffer-file-name "/tmp/chezmoi/modify_dot_config")
     (let ((chezmoi-root "/tmp/chezmoi/"))
+      (add-hook 'chezmoi-template-mode-hook #'go-template-ts-mode nil t)
       (cl-letf (((symbol-function 'chezmoi-changed-p) (lambda (&rest _) nil)))
         (chezmoi-mode 1))
       (should chezmoi-mode)
@@ -139,7 +150,8 @@
       (delete-directory root t))))
 
 (ert-deftest chezmoi-template-uses-treesit-expression-spans ()
-  (skip-unless (treesit-ready-p 'gotmpl))
+  (skip-unless (and (fboundp 'go-template-ts-mode)
+                    (treesit-ready-p 'gotmpl)))
   (with-temp-buffer
     (insert "{{ .chezmoi.os }}\n")
     (go-template-ts-mode)
@@ -150,7 +162,8 @@
                      "{{ .chezmoi.os }}")))))
 
 (ert-deftest chezmoi-template-finds-selector-inside-control-action ()
-  (skip-unless (treesit-ready-p 'gotmpl))
+  (skip-unless (and (fboundp 'go-template-ts-mode)
+                    (treesit-ready-p 'gotmpl)))
   (with-temp-buffer
     (insert "{{ if .enabled }}\n{{ .path.workspace.qmk }}\n{{ end }}\n")
     (go-template-ts-mode)
@@ -196,7 +209,8 @@
         (chezmoi-template--cancel-display-timer)))))
 
 (ert-deftest chezmoi-capf-completes-the-final-selector-segment ()
-  (skip-unless (treesit-ready-p 'gotmpl))
+  (skip-unless (and (fboundp 'go-template-ts-mode)
+                    (treesit-ready-p 'gotmpl)))
   (with-temp-buffer
     (insert "{{ .chezmoi.o }}")
     (go-template-ts-mode)

@@ -2,8 +2,8 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.4.5
-;; Package-Requires: ((emacs "29.1") (go-template-ts-mode "0.1.2"))
+;; Version: 1.4.6
+;; Package-Requires: ((emacs "29.1"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
 ;; Keywords: vc
 
@@ -38,11 +38,13 @@
 (require 'subr-x)
 (require 'chezmoi-core)
 (require 'cl-lib)
-(require 'go-template-ts-mode)
+(require 'treesit)
 
 (declare-function chezmoi-template-source-file-p "chezmoi-core" (file))
 (declare-function chezmoi-get-data "chezmoi" ())
-(declare-function pm-map-over-spans "polymode-core" (function &optional type))
+(declare-function pm-map-over-spans
+                  "polymode-core"
+                  (function &optional beg end count backwardp visibly no-cache))
 
 (defvar chezmoi-mode)
 
@@ -50,13 +52,6 @@
   "Hook run in Chezmoi template source buffers.
 The hook runs before completion and template display are initialized.  It may
 select a suitable major mode for the template source file.")
-
-(defun chezmoi-template-setup-mode ()
-  "Use `go-template-ts-mode' when the source has no inferred host mode."
-  (when (memq major-mode '(fundamental-mode text-mode))
-    (go-template-ts-mode)))
-
-(add-hook 'chezmoi-template-mode-hook #'chezmoi-template-setup-mode)
 
 (defun chezmoi-template-normalize-host-filename (filename)
   "Translate chezmoi source attributes in host FILENAME."
@@ -85,6 +80,13 @@ select a suitable major mode for the template source file.")
 (defvar chezmoi-template-key-regex "\\."
   "Regex for splitting keys.")
 
+(defun chezmoi-template--gotmpl-parser-p ()
+  "Return non-nil when the current buffer has a Go Template parser."
+  (and (treesit-ready-p 'gotmpl)
+       (cl-some (lambda (parser)
+                  (eq (treesit-parser-language parser) 'gotmpl))
+                (treesit-parser-list))))
+
 (defun chezmoi-template-execute (template)
   "Convert TEMPLATE using chezmoi and return its output."
   (with-temp-buffer
@@ -93,9 +95,8 @@ select a suitable major mode for the template source file.")
 
 (defun chezmoi-template--selector-node-at-point ()
   "Return the Go template selector node at point, if any."
-  (when (and (treesit-ready-p 'gotmpl)
-             (treesit-parser-list))
-    (let ((node (treesit-node-at (max (point-min) (1- (point))))))
+  (when (chezmoi-template--gotmpl-parser-p)
+    (let ((node (treesit-node-at (max (point-min) (1- (point))) 'gotmpl)))
       (while (and node
                   (not (equal (treesit-node-type node)
                               "selector_expression")))
@@ -170,8 +171,7 @@ select a suitable major mode for the template source file.")
 (defun chezmoi-template--treesit-expression-spans (&optional minimum maximum)
   "Return simple Go template expression spans in the current buffer.
 Only direct selector expressions such as `{{ .foo }}' are returned."
-  (when (and (treesit-ready-p 'gotmpl)
-             (treesit-parser-list))
+  (when (chezmoi-template--gotmpl-parser-p)
     (let ((minimum (or minimum (point-min)))
           (maximum (or maximum (point-max)))
           spans)
@@ -223,15 +223,12 @@ F is called with the start of the match, the end of the match,
 the template value and BUFFER-OR-NAME."
   (with-current-buffer buffer-or-name
     (cond
-     ((eq major-mode 'go-template-ts-mode)
-      (chezmoi-template--funcall-over-spans
-       f (chezmoi-template--treesit-expression-spans) buffer-or-name))
      ((and (bound-and-true-p polymode-mode)
            (fboundp 'pm-map-over-spans))
       (let ((base-buffer (current-buffer)))
         (pm-map-over-spans
          (lambda (span)
-           (when (eq major-mode 'go-template-ts-mode)
+           (when (chezmoi-template--gotmpl-parser-p)
              (dolist (expression
                       (chezmoi-template--treesit-expression-spans
                        (nth 1 span) (nth 2 span)))
@@ -240,7 +237,10 @@ the template value and BUFFER-OR-NAME."
                         (end (cdr expression))
                         (template (buffer-substring-no-properties start end))
                         (value (chezmoi-template-execute template)))
-                   (funcall f start end value base-buffer))))))))))))
+                   (funcall f start end value base-buffer)))))))))
+     ((chezmoi-template--gotmpl-parser-p)
+      (chezmoi-template--funcall-over-spans
+       f (chezmoi-template--treesit-expression-spans) buffer-or-name)))))
 
 (defun chezmoi-template--funcall-over-display-properties (f start buffer-or-name)
   "Call F on each occurrence with display property in BUFFER-OR-NAME.

@@ -2,9 +2,8 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.4.5
-;; Package-Requires: ((emacs "29.1") (go-template-ts-mode "0.1.2")
-;;                     (transient "0.4.0"))
+;; Version: 1.4.6
+;; Package-Requires: ((emacs "29.1") (transient "0.4.0"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
 ;; Keywords: vc
 
