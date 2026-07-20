@@ -103,4 +103,4 @@ test-integration: check-test-deps
 test: test-core test-integration
 
 clean:
-	find . -path './$(TEST_DEPS_DIR)' -prune -o -name '*.elc' -delete
+	find . -path './$(TEST_DEPS_DIR)' -prune -o -name '*.elc' -exec rm -f {} +
