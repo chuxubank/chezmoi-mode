@@ -20,6 +20,44 @@
 (ert-deftest chezmoi-find-scripts-is-command ()
   (should (commandp #'chezmoi-find-scripts)))
 
+(ert-deftest chezmoi-find-scripts-enables-chezmoi-template-support ()
+  (let ((script (make-temp-file "run_once_setup.sh" nil ".tmpl"
+                                "#!/bin/sh\n{{ .chezmoi.os }}\n"))
+        (chezmoi-template-mode-hook nil)
+        activated
+        buffer)
+    (unwind-protect
+        (progn
+          (add-hook 'chezmoi-template-mode-hook
+                    (lambda () (setq activated t)))
+          (setq buffer (chezmoi-find-scripts script))
+          (with-current-buffer buffer
+            (should chezmoi-mode)
+            (should activated)))
+      (when (buffer-live-p buffer)
+        (with-current-buffer buffer
+          (set-buffer-modified-p nil))
+        (kill-buffer buffer))
+      (delete-file script))))
+
+(ert-deftest chezmoi-find-infers-mode-from-target-filename ()
+  (let ((source (make-temp-file "dot_custom" nil nil
+                                "(message \"managed\")\n"))
+        (target "/tmp/custom.el")
+        buffer)
+    (unwind-protect
+        (cl-letf (((symbol-function 'chezmoi-source-file)
+                   (lambda (_) source)))
+          (chezmoi-find target)
+          (setq buffer (current-buffer))
+          (should (eq major-mode 'emacs-lisp-mode))
+          (should chezmoi-mode))
+      (when (buffer-live-p buffer)
+        (with-current-buffer buffer
+          (set-buffer-modified-p nil))
+        (kill-buffer buffer))
+      (delete-file source))))
+
 (ert-deftest chezmoi-dispatch-passes-arguments-without-shell-quoting ()
   (let ((chezmoi-command "printf"))
     (should (equal (chezmoi--dispatch '("%s" "hello world"))

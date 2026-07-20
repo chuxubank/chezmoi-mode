@@ -9,6 +9,7 @@ OPTIONAL_EXTENSIONS = extensions/chezmoi-magit.el
 PACKAGE_SETUP = \
 	--eval "(require 'package)" \
 	--eval "(package-initialize)" \
+	--eval "(setq load-prefer-newer t)" \
 	--eval "(setq load-path (cons \"$(CURDIR)\" (delete \"$(CURDIR)\" load-path)))" \
 	--eval "(setq load-path (cons \"$(CURDIR)/test\" (delete \"$(CURDIR)/test\" load-path)))" \
 	$(foreach path,$(TEST_GO_TEMPLATE_PATH),--eval "(setq load-path (cons \"$(path)\" (delete \"$(path)\" load-path)))")

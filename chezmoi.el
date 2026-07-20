@@ -143,6 +143,18 @@ Pretty-print the output first when JSON-P is non-nil."
   (thread-last (chezmoi-managed)
 	       (cl-remove-if #'file-directory-p)))
 
+(defun chezmoi--open-source-file (source-file &optional mode-file)
+  "Visit SOURCE-FILE, infer its mode from MODE-FILE, and enable Chezmoi.
+Return the visited buffer.  When MODE-FILE is nil, keep the mode selected from
+SOURCE-FILE itself."
+  (find-file source-file)
+  (when mode-file
+    (let ((buffer-file-name mode-file))
+      (set-auto-mode t)))
+  (unless chezmoi-mode
+    (chezmoi-mode 1))
+  (current-buffer))
+
 ;;;###autoload
 (defun chezmoi-find-scripts (script)
   "Edit a source SCRIPT managed by chezmoi."
@@ -154,7 +166,7 @@ Pretty-print the output first when JSON-P is non-nil."
             chezmoi--dispatch
             (cl-map 'list #'abbreviate-file-name))
           'project-file)))
-  (find-file script))
+  (chezmoi--open-source-file script))
 
 (defun chezmoi-transient--current-file-p ()
   "Return non-nil when the current buffer visits a file."
@@ -442,12 +454,6 @@ PROMPT, CHOICES, and CATEGORY are passed to `complete-with-action'."
 		       (complete-with-action action choices string predicate)))
 		   nil t))
 
-(defun chezmoi--use-template (file)
-  "If the input `FILE' matches the regex."
-  (let ((ret))
-        (dolist (i chezmoi-use-template-source-mode-regex ret)
-          (setq ret (or ret (string-match i file))))))
-
 ;;;###autoload
 (defun chezmoi-find (file)
   "Edit a source FILE managed by chezmoi.
@@ -461,21 +467,9 @@ Note: Does not run =chezmoi edit=."
 				   'project-file)))
   (let ((source-file (chezmoi-source-file file)))
     (when source-file
-      (find-file source-file)
       (let ((target-file (expand-file-name file)))
-	(when-let ((mode (and (chezmoi--use-template target-file)
-                              (assoc-default target-file auto-mode-alist 'string-match))))
-          (funcall
-           (if (and (listp mode) (null (car mode)))
-               (save-window-excursion
-                 (let* ((existed (get-file-buffer target-file))
-                        (_ (find-file target-file))
-                        (m major-mode))
-                   (unless existed (kill-current-buffer))
-                   m))
-	     mode)))
-        (message target-file)
-        (unless chezmoi-mode (chezmoi-mode))
+        (chezmoi--open-source-file source-file target-file)
+        (message "%s" target-file)
         source-file))))
 
 ;;;###autoload

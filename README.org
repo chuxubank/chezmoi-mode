@@ -57,6 +57,9 @@ make compile-extensions
   You can overwrite the target state file manually by calling ~chezmoi-write~ from within the source state buffer. Alternatively, you can overwrite the source state file with the content from the current target state file using ~chezmoi-write~. This can be performed for several files in a row using ~chezmoi-write-files~.
 
   Quickly jump to the corresponding target file or source file using ~chezmoi-open-other~.
+  ~chezmoi-find-scripts~ uses the same source-opening path as ~chezmoi-find~,
+  so template mode selection, completion, display, and synchronization are
+  initialized for Chezmoi scripts as well.
 
 ** Transient
 

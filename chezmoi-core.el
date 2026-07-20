@@ -51,11 +51,6 @@
   :type '(string)
   :group 'chezmoi)
 
-(defcustom chezmoi-use-template-source-mode-regex '(".*")
-  "If any match, activates the target file major mode in template files."
-  :group 'chezmoi
-  :type '(repeat string))
-
 (defcustom chezmoi-mode-overwrite-destination nil
   "Always attach a hook to write to the target file to chezmoi buffers.
 If the target has been changed, it will be overwritten."
