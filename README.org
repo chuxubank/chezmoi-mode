@@ -9,7 +9,7 @@ This package provides convenience functions for interacting with the [[https://c
 The recording above demonstrates editing a chezmoi template with source file on left, command log on top right, and associated target file on bottom right.
 
 * Installation
-  Clone this repo or use a package manager.
+  Install directly from the Git repository with ~package-vc~:
 
   Go-template source files ending in ~.tmpl~, beginning with ~modify_~, or
   located below ~.chezmoitemplates~ can select their major mode from
@@ -20,6 +20,8 @@ The recording above demonstrates editing a chezmoi template with source file on 
   source attributes for integrations that infer a host mode from a filename.
 
   #+begin_src emacs-lisp :noweb yes
+(unless (package-installed-p 'chezmoi-mode)
+  (package-vc-install "https://github.com/chuxubank/chezmoi-mode"))
 (use-package chezmoi-mode)
   #+end_src
 
@@ -35,8 +37,8 @@ The recording above demonstrates editing a chezmoi template with source file on 
 
   #+begin_src shell
 make install-test-deps
-make
-make compile-extensions
+make clean all
+make compile-all-extensions
   #+end_src
 
   ~compile-all-extensions~ additionally checks the optional Magit integration
@@ -49,12 +51,15 @@ make compile-extensions
 (global-set-key (kbd "C-c C s")  #'chezmoi-write)
   #+end_src
 
-  You can manually call ~M-x chezmoi-mode~ in a source file buffer to turn on/of syncronization and template rendering (see [[Templates]]). When using ~chezmoi-find~ or ~chezmoi-ediff~, ~chezmoi-mode~ will be turned on for you in the source file's buffer.
+  You can manually call ~M-x chezmoi-mode~ in a source file buffer to turn
+  synchronization on or off. Template buffers additionally get completion and
+  template rendering (see [[Templates]]). When using ~chezmoi-find~ or
+  ~chezmoi-ediff~, ~chezmoi-mode~ is turned on for the source file buffer.
 
 * Usage
   One of the main goals of this package is to allow users to access their files managed by chezmoi and sync changes in the source state with the target state files that are used. Opening source state files is done using ~chezmoi-find~. This opens a buffer for the source state and adds a hook to sync it with the corresponding target state file when changes are saved. However, to prevent overwriting changes that were made to the target state file outside of the source state (such as by auto-generated content), this hook is only added when the source and target states are in sync at the time of opening.
 
-  You can overwrite the target state file manually by calling ~chezmoi-write~ from within the source state buffer. Alternatively, you can overwrite the source state file with the content from the current target state file using ~chezmoi-write~. This can be performed for several files in a row using ~chezmoi-write-files~.
+  You can overwrite the target state file manually by calling ~chezmoi-write~ from within the source state buffer. Alternatively, you can overwrite the source state file with the content from the current target state file using ~chezmoi-write~. This can be performed for several files in a row using ~chezmoi-sync-files~.
 
   Quickly jump to the corresponding target file or source file using ~chezmoi-open-other~.
   ~chezmoi-find-scripts~ uses the same source-opening path as ~chezmoi-find~,
@@ -88,7 +93,9 @@ make compile-extensions
 
 * Templates
 
-  chezmoi-mode provides a minor mode for displaying the values of [[https://www.chezmoi.io/user-guide/templating/][chezmoi template]] strings as overlays in source file buffers. You can toggle their display with ~M-x chezmoi-template-buffer-display~ or with a configuration variable:
+  chezmoi-mode displays the values of [[https://www.chezmoi.io/user-guide/templating/][chezmoi template]] selectors with text
+  properties in template source buffers. You can toggle their display with
+  ~M-x chezmoi-template-buffer-display~ or with a configuration variable:
 
   #+begin_src emacs-lisp :noweb yes
 (setq-default chezmoi-template-display-p t)   ;; Display template values in all source buffers.
@@ -104,9 +111,12 @@ make compile-extensions
 
 
 ** Completion at point
-   ~chezmoi-mode~ automatically installs ~chezmoi-capf~ buffer-locally. It uses
-   Emacs' standard completion-at-point protocol and works with completion UIs
-   such as Corfu and Company through ~company-capf~.
+   In template buffers, ~chezmoi-mode~ installs ~chezmoi-capf~ buffer-locally.
+   It uses Emacs' standard completion-at-point protocol and works with
+   completion UIs such as Corfu and Company through ~company-capf~. Repeated
+   requests reuse template data for
+   ~chezmoi-template-completion-cache-duration~ seconds (one second by
+   default).
 
 ** Dired
 
@@ -189,7 +199,7 @@ make compile-extensions
       "f d d" #'chezmoi-diff
       "f d e" #'chezmoi-ediff
       "f d f" #'chezmoi-find
-      "f d i" #'chezmoi-write-files
+      "f d i" #'chezmoi-sync-files
       "f d o" #'chezmoi-open-other
       "f d t" #'chezmoi-template-buffer-display
       "f d c" #'chezmoi-mode)

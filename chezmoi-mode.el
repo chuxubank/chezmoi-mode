@@ -2,7 +2,7 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.4.8
+;; Version: 1.4.9
 ;; Package-Requires: ((emacs "29.1") (transient "0.4.0"))
 ;; Homepage: https://github.com/chuxubank/chezmoi-mode
 ;; Keywords: vc
@@ -51,11 +51,11 @@
 
 (defvar chezmoi-mode nil)
 
-(declare-function chezmoi-template--after-change "chezmoi-template" (&rest _))
 (declare-function chezmoi-template-buffer-display "chezmoi-template" (&optional display-p start buffer-or-name))
-(declare-function chezmoi-template-schedule-buffer-display "chezmoi-template" ())
+(declare-function chezmoi-template-buffer-p "chezmoi-template" (&optional buffer-or-name))
+(declare-function chezmoi-template-schedule-buffer-display "chezmoi-template" (&optional parser-found-p))
+(declare-function chezmoi-template-set-completion "chezmoi-template" (enabled &optional buffer-or-name))
 (declare-function chezmoi-template-source-file-p "chezmoi-core" (file))
-(declare-function chezmoi-capf "chezmoi-template" ())
 
 (defmacro chezmoi--locally (&rest body)
   "Ensure BODY is run with a local `default-directory'."
@@ -172,15 +172,25 @@ SOURCE-FILE itself."
   "Return non-nil when the current buffer visits a file."
   buffer-file-name)
 
+(defun chezmoi-transient--base-buffer ()
+  "Return the base buffer for the current Transient context."
+  (or (buffer-base-buffer) (current-buffer)))
+
 (defun chezmoi-transient--mode-description ()
   "Return a state-aware description for `chezmoi-mode'."
-  (if chezmoi-mode "Disable Chezmoi mode" "Enable Chezmoi mode"))
+  (with-current-buffer (chezmoi-transient--base-buffer)
+    (if chezmoi-mode "Disable Chezmoi mode" "Enable Chezmoi mode")))
 
 (defun chezmoi-transient--display-description ()
   "Return a state-aware description for template display."
-  (if (bound-and-true-p chezmoi-template--buffer-displayed-p)
-      "Hide template values"
-    "Display template values"))
+  (with-current-buffer (chezmoi-transient--base-buffer)
+    (if (bound-and-true-p chezmoi-template--buffer-displayed-p)
+        "Hide template values"
+      "Display template values")))
+
+(defun chezmoi-transient--template-buffer-p ()
+  "Return non-nil when template display is available in this buffer."
+  (chezmoi-template-buffer-p (chezmoi-transient--base-buffer)))
 
 (defun chezmoi-transient--extension-available-p (library)
   "Return non-nil when extension LIBRARY can be loaded."
@@ -199,6 +209,12 @@ SOURCE-FILE itself."
          (and (member "--force" (transient-args 'chezmoi-transient))
               '(4))))
     (call-interactively #'chezmoi-sync-files)))
+
+(transient-define-suffix chezmoi-transient-toggle-mode ()
+  "Toggle `chezmoi-mode' in the current base buffer."
+  (interactive)
+  (with-current-buffer (chezmoi-transient--base-buffer)
+    (call-interactively #'chezmoi-mode)))
 
 ;;;###autoload
 (transient-define-prefix chezmoi-transient ()
@@ -234,8 +250,8 @@ SOURCE-FILE itself."
    ["Current buffer"
     ("t" "Toggle template values" chezmoi-template-buffer-display
      :description chezmoi-transient--display-description
-     :inapt-if-not chezmoi-mode)
-    ("c" "Toggle Chezmoi mode" chezmoi-mode
+     :inapt-if-not chezmoi-transient--template-buffer-p)
+    ("c" "Toggle Chezmoi mode" chezmoi-transient-toggle-mode
      :description chezmoi-transient--mode-description
      :inapt-if-not chezmoi-transient--current-file-p)]
    ["Integrations"
@@ -509,21 +525,21 @@ Prefix ARG is passed to `chezmoi-write'."
   :lighter " Chezmoi"
   (defvar chezmoi-mode-overwrite-destination) ; silence
   (if chezmoi-mode
-      (progn
-	(when (and buffer-file-name
-	           (chezmoi-template-source-file-p buffer-file-name))
+      (let ((template-p
+             (and buffer-file-name
+                  (chezmoi-template-source-file-p buffer-file-name))))
+	(when template-p
 	  (run-hooks 'chezmoi-template-mode-hook)
 	  ;; A hook may select a major mode, which resets minor modes.
 	  (setq-local chezmoi-mode t))
 	(add-hook 'after-save-hook #'chezmoi--write-after-save 0 t)
-	(add-hook 'after-change-functions #'chezmoi-template--after-change nil 1)
-	(add-hook 'completion-at-point-functions #'chezmoi-capf nil t)
-	(chezmoi-template-schedule-buffer-display))
+	(when (and template-p (chezmoi-template-set-completion t))
+	  (when chezmoi-template-display-p
+	    (chezmoi-template-schedule-buffer-display t))))
     (progn
       (chezmoi-template-buffer-display nil)
-      (remove-hook 'after-save-hook #'chezmoi--write-after-save t)
-      (remove-hook 'after-change-functions #'chezmoi-template--after-change t)
-      (remove-hook 'completion-at-point-functions #'chezmoi-capf t))))
+      (chezmoi-template-set-completion nil)
+      (remove-hook 'after-save-hook #'chezmoi--write-after-save t))))
 
 (provide 'chezmoi-mode)
 

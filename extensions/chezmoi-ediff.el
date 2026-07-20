@@ -2,8 +2,8 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.4.5
-;; Package-Requires: ((emacs "29.1") (chezmoi-mode "1.4.7"))
+;; Version: 1.4.9
+;; Package-Requires: ((emacs "29.1") (chezmoi-mode "1.4.9"))
 ;; Homepage: https://github.com/chuxubank/chezmoi-mode
 ;; Keywords: vc
 
@@ -30,6 +30,7 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'chezmoi-mode)
 (require 'ediff)
 
@@ -46,34 +47,120 @@ changing the source template file."
   :group 'chezmoi-mode-settings)
 
 (defvar-local chezmoi-ediff--source-file nil
-  "Current ediff source-file.")
+  "Source file associated with the current Ediff control buffer.")
 
-(defun chezmoi-ediff--ediff-get-region-contents (n buf-type ctrl-buf &optional start end)
-  "An overriding fn for `ediff-get-region-contents'.
-Converts and applies template diffs from the source-file.
-N, BUF-TYPE, CTRL-BUF, START, and END are all passed to `ediff'."
-  (ediff-with-current-buffer
-      (ediff-with-current-buffer ctrl-buf (ediff-get-buffer buf-type))
-    (if (string-equal chezmoi-ediff--source-file (buffer-file-name))
-        (chezmoi-template-execute (buffer-substring-no-properties
-                                   (or start (ediff-get-diff-posn buf-type 'beg n ctrl-buf))
-                                   (or end (ediff-get-diff-posn buf-type 'end n ctrl-buf))))
-      (buffer-substring
-       (or start (ediff-get-diff-posn buf-type 'beg n ctrl-buf))
-       (or end (ediff-get-diff-posn buf-type 'end n ctrl-buf))))))
+(defvar-local chezmoi-ediff--template-source-file nil
+  "Template source file associated with the current Ediff control buffer.")
+
+(defvar-local chezmoi-ediff--rendered-temp-file nil
+  "Rendered temporary file associated with the current Ediff control buffer.")
+
+(defvar chezmoi-ediff--template-sessions nil
+  "Live Ediff control buffers that compare a template source file.")
+
+(defun chezmoi-ediff--same-file-p (file-a file-b)
+  "Return non-nil when FILE-A and FILE-B name the same file."
+  (and file-a file-b
+       (string-equal (expand-file-name file-a)
+                     (expand-file-name file-b))))
+
+(defun chezmoi-ediff--ediff-get-region-contents
+    (old-function n buf-type ctrl-buf &optional start end)
+  "Call OLD-FUNCTION, rendering template source regions when appropriate.
+N, BUF-TYPE, CTRL-BUF, START, and END are passed to
+`ediff-get-region-contents'."
+  (let* ((source-file
+          (and (buffer-live-p ctrl-buf)
+               (buffer-local-value
+                'chezmoi-ediff--template-source-file ctrl-buf)))
+         (variant-buffer
+          (and source-file
+               (with-current-buffer ctrl-buf
+                 (ediff-get-buffer buf-type)))))
+    (if (and (buffer-live-p variant-buffer)
+             (chezmoi-ediff--same-file-p
+              source-file (buffer-file-name variant-buffer)))
+        (with-current-buffer variant-buffer
+          (chezmoi-template-execute
+           (buffer-substring-no-properties
+            (or start (ediff-get-diff-posn buf-type 'beg n ctrl-buf))
+            (or end (ediff-get-diff-posn buf-type 'end n ctrl-buf)))))
+      (funcall old-function n buf-type ctrl-buf start end))))
+
+(defun chezmoi-ediff--ensure-template-advice ()
+  "Install the template-aware Ediff advice if necessary."
+  (unless (advice-member-p #'chezmoi-ediff--ediff-get-region-contents
+                           'ediff-get-region-contents)
+    (advice-add 'ediff-get-region-contents :around
+                #'chezmoi-ediff--ediff-get-region-contents)))
+
+(defun chezmoi-ediff--prune-template-sessions ()
+  "Prune dead template sessions and synchronize the Ediff advice."
+  (setq chezmoi-ediff--template-sessions
+        (cl-delete-if-not #'buffer-live-p
+                          chezmoi-ediff--template-sessions))
+  (if chezmoi-ediff--template-sessions
+      (chezmoi-ediff--ensure-template-advice)
+    (advice-remove 'ediff-get-region-contents
+                   #'chezmoi-ediff--ediff-get-region-contents)))
+
+(defun chezmoi-ediff--unregister-template-session ()
+  "Unregister the current Ediff control buffer's template session."
+  (setq chezmoi-ediff--template-sessions
+        (delq (current-buffer) chezmoi-ediff--template-sessions))
+  (setq-local chezmoi-ediff--source-file nil)
+  (setq-local chezmoi-ediff--template-source-file nil)
+  (remove-hook 'ediff-cleanup-hook
+               #'chezmoi-ediff--ediff-cleanup-hook t)
+  (remove-hook 'kill-buffer-hook
+               #'chezmoi-ediff--unregister-template-session t)
+  (chezmoi-ediff--prune-template-sessions))
+
+(defun chezmoi-ediff--register-session (source-file template-p)
+  "Register the current Ediff control buffer for SOURCE-FILE.
+When TEMPLATE-P is non-nil, enable template-aware region handling."
+  (setq-local chezmoi-ediff--source-file source-file)
+  (setq-local chezmoi-ediff--template-source-file
+              (and template-p source-file))
+  (add-hook 'ediff-cleanup-hook #'chezmoi-ediff--ediff-cleanup-hook nil t)
+  (add-hook 'kill-buffer-hook
+            #'chezmoi-ediff--unregister-template-session nil t)
+  (when template-p
+    (cl-pushnew (current-buffer) chezmoi-ediff--template-sessions)
+    (chezmoi-ediff--ensure-template-advice)))
+
+(defun chezmoi-ediff--delete-rendered-temp-file ()
+  "Delete the rendered temporary file registered in the current buffer."
+  (when-let ((file chezmoi-ediff--rendered-temp-file))
+    (setq-local chezmoi-ediff--rendered-temp-file nil)
+    (when (file-exists-p file)
+      (delete-file file)))
+  (remove-hook 'ediff-cleanup-hook
+               #'chezmoi-ediff--delete-rendered-temp-file t)
+  (remove-hook 'kill-buffer-hook
+               #'chezmoi-ediff--delete-rendered-temp-file t))
+
+(defun chezmoi-ediff--register-rendered-temp-file (file)
+  "Register rendered temporary FILE in the current Ediff control buffer."
+  (setq-local chezmoi-ediff--rendered-temp-file file)
+  (add-hook 'ediff-cleanup-hook
+            #'chezmoi-ediff--delete-rendered-temp-file nil t)
+  (add-hook 'kill-buffer-hook
+            #'chezmoi-ediff--delete-rendered-temp-file nil t))
 
 (defun chezmoi-ediff--ediff-cleanup-hook ()
-  (when chezmoi-ediff-force-overwrite
-    (when-let (source-file (or (with-current-buffer ediff-buffer-A chezmoi-ediff--source-file)
-			       (with-current-buffer ediff-buffer-B chezmoi-ediff--source-file)))
-      (when (equal (with-current-buffer ediff-buffer-A (buffer-string))
-		   (with-current-buffer ediff-buffer-B (buffer-string)))
-	(chezmoi-write source-file t)))))
-
-(defun chezmoi-ediff--ediff-quit-hook ()
-  "Remove the temporary template-aware Ediff advice."
-  (advice-remove 'ediff-get-region-contents
-                 #'chezmoi-ediff--ediff-get-region-contents))
+  "Apply identical variants when requested and unregister the session."
+  (unwind-protect
+      (when (and chezmoi-ediff-force-overwrite
+                 chezmoi-ediff--source-file
+                 (buffer-live-p ediff-buffer-A)
+                 (buffer-live-p ediff-buffer-B)
+                 (equal (with-current-buffer ediff-buffer-A
+                          (buffer-string))
+		        (with-current-buffer ediff-buffer-B
+                          (buffer-string))))
+        (chezmoi-write chezmoi-ediff--source-file t))
+    (chezmoi-ediff--unregister-template-session)))
 
 (defun chezmoi--get-ancestor (source-file)
   "Create a temp file for SOURCE-FILE at git HEAD."
@@ -140,22 +227,52 @@ Note: Does not run =chezmoi merge=."
            (chezmoi--completing-read "Select a dotfile to merge: "
 				   (chezmoi-changed-files)
 				   'project-file))))
-  (let* ((source-file (chezmoi-find file)))
-      (if (and chezmoi-ediff-template-use-ediff3
-               (not (chezmoi-encrypted-p source-file))
-               (chezmoi-template-file-p source-file))
-          (progn (let ((temp (make-temp-file (file-name-nondirectory file))))
-                   (with-temp-file temp
-                     (insert (with-temp-buffer
-                               (insert-file-contents source-file)
-                               (chezmoi-template-execute (buffer-string)))))
-                (ediff3 temp file source-file)))
-      (advice-add 'ediff-get-region-contents :override #'chezmoi-ediff--ediff-get-region-contents)
-      (setq chezmoi-ediff--source-file source-file)
-      (ediff source-file file)
-      ;; (ediff-merge-files-with-ancestor source-file file (chezmoi--get-ancestor source-file) nil file)
-      (add-hook 'ediff-cleanup-hook #'chezmoi-ediff--ediff-cleanup-hook nil t)
-      (add-hook 'ediff-quit-hook #'chezmoi-ediff--ediff-quit-hook nil t))))
+  (let* ((source-file (chezmoi-find file))
+         (template-p
+          (and (not (chezmoi-encrypted-p source-file))
+               (chezmoi-template-file-p source-file))))
+    (if (and chezmoi-ediff-template-use-ediff3 template-p)
+        (let ((temp (make-temp-file (file-name-nondirectory file)))
+              control-buffer completed registered)
+          (unwind-protect
+              (progn
+                (with-temp-file temp
+                  (insert (with-temp-buffer
+                            (insert-file-contents source-file)
+                            (chezmoi-template-execute (buffer-string)))))
+                (prog1
+                    (ediff3
+                     temp file source-file
+                     (list
+                      (lambda ()
+                        (setq control-buffer (current-buffer))
+                        (chezmoi-ediff--register-rendered-temp-file temp)
+                        (setq registered t))))
+                  (setq completed t)))
+            (unless (and completed registered)
+              (if (buffer-live-p control-buffer)
+                  (with-current-buffer control-buffer
+                    (chezmoi-ediff--delete-rendered-temp-file))
+                (when (file-exists-p temp)
+                  (delete-file temp))))))
+      (let (control-buffer completed registered)
+        (when template-p
+          (chezmoi-ediff--ensure-template-advice))
+        (unwind-protect
+            (prog1
+                (ediff
+                 source-file file
+                 (list
+                  (lambda ()
+                    (setq control-buffer (current-buffer))
+                    (chezmoi-ediff--register-session source-file template-p)
+                    (setq registered t))))
+              (setq completed t))
+          (unless (and completed registered)
+            (if (buffer-live-p control-buffer)
+                (with-current-buffer control-buffer
+                  (chezmoi-ediff--unregister-template-session))
+              (chezmoi-ediff--prune-template-sessions))))))))
 
 (provide 'chezmoi-ediff)
 ;;; chezmoi-ediff.el ends here

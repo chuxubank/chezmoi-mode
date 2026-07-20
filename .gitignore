@@ -1,2 +1,6 @@
 /resources/*.mkv
 /resources/*.mp4
+*.elc
+*-autoloads.el
+*-pkg.el
+/.test-deps/

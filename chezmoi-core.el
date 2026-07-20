@@ -2,7 +2,7 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.4.8
+;; Version: 1.4.9
 ;; Package-Requires: ((emacs "29.1"))
 ;; Homepage: https://github.com/chuxubank/chezmoi-mode
 ;; Keywords: vc
@@ -44,7 +44,7 @@
   :group 'tools)
 
 (defvar chezmoi-mode nil)
-(declare-function chezmoi-mode "chezmoi-mode" ())
+(declare-function chezmoi-mode "chezmoi-mode" (&optional arg))
 
 (defcustom chezmoi-command "chezmoi"
   "The location of the chezmoi command."

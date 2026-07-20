@@ -2,7 +2,7 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.4.8
+;; Version: 1.4.9
 ;; Package-Requires: ((emacs "29.1"))
 ;; Homepage: https://github.com/chuxubank/chezmoi-mode
 ;; Keywords: vc
@@ -72,11 +72,32 @@ select a suitable major mode for the template source file.")
   :type '(number)
   :group 'chezmoi-mode-settings)
 
+(defcustom chezmoi-template-completion-cache-duration 1.0
+  "Seconds to reuse Chezmoi data while completing template selectors.
+Set this to zero to query Chezmoi on every completion request."
+  :type '(number)
+  :group 'chezmoi-mode-settings)
+
 (defvar-local chezmoi-template--buffer-displayed-p nil
   "Whether all templates are currently displayed in buffer.")
 
 (defvar-local chezmoi-template--display-timer nil
   "Pending idle timer for refreshing displayed template values.")
+
+(defvar-local chezmoi-template--completion-buffers nil
+  "Buffers where Chezmoi template completion was installed.")
+
+(defvar-local chezmoi-template--completion-enabled-p nil
+  "Whether new Go Template parser buffers should receive completion.")
+
+(defvar-local chezmoi-template--refresh-buffers nil
+  "Buffers where Chezmoi template refresh hooks were installed.")
+
+(defvar-local chezmoi-template--refresh-enabled-p nil
+  "Whether new Go Template parser buffers should receive refresh hooks.")
+
+(defvar-local chezmoi-template--completion-data-cache nil
+  "Cached Chezmoi completion data as a (TIMESTAMP . DATA) pair.")
 
 (defvar chezmoi-template-key-regex "\\."
   "Regex for splitting keys.")
@@ -88,6 +109,34 @@ select a suitable major mode for the template source file.")
                   (eq (treesit-parser-language parser) 'gotmpl))
                 (treesit-parser-list))))
 
+(defun chezmoi-template--base-buffer (&optional buffer-or-name)
+  "Return the base buffer for BUFFER-OR-NAME or the current buffer."
+  (with-current-buffer (or buffer-or-name (current-buffer))
+    (or (buffer-base-buffer) (current-buffer))))
+
+(defun chezmoi-template--map-gotmpl-spans (function &optional buffer-or-name)
+  "Call FUNCTION for each Go Template span in BUFFER-OR-NAME.
+FUNCTION receives the Polymode span and runs in the buffer that owns its
+`gotmpl' parser.  A non-Polymode buffer is represented by one full-buffer span."
+  (with-current-buffer (chezmoi-template--base-buffer buffer-or-name)
+    (if (and (bound-and-true-p polymode-mode)
+             (fboundp 'pm-map-over-spans))
+        (save-current-buffer
+          (pm-map-over-spans
+           (lambda (span)
+             (when (chezmoi-template--gotmpl-parser-p)
+               (funcall function span)))))
+      (when (chezmoi-template--gotmpl-parser-p)
+        (funcall function (list nil (point-min) (point-max)))))))
+
+(defun chezmoi-template-buffer-p (&optional buffer-or-name)
+  "Return non-nil when BUFFER-OR-NAME has Go Template capabilities."
+  (catch 'gotmpl-parser
+    (chezmoi-template--map-gotmpl-spans
+     (lambda (_span) (throw 'gotmpl-parser t))
+     buffer-or-name)
+    nil))
+
 (defun chezmoi-template-execute (template)
   "Convert TEMPLATE using chezmoi and return its output."
   (with-temp-buffer
@@ -97,18 +146,33 @@ select a suitable major mode for the template source file.")
 (defun chezmoi-template--selector-node-at-point ()
   "Return the Go template selector node at point, if any."
   (when (chezmoi-template--gotmpl-parser-p)
-    (let ((node (treesit-node-at (max (point-min) (1- (point))) 'gotmpl)))
+    (let ((node (treesit-node-at (max (point-min) (1- (point))) 'gotmpl))
+          field)
       (while (and node
                   (not (equal (treesit-node-type node)
                               "selector_expression")))
+        (when (equal (treesit-node-type node) "field")
+          (setq field node))
         (setq node (treesit-node-parent node)))
-      node)))
+      (or node field))))
 
 (defvar chezmoi-template--completion-properties
   (list :annotation-function (lambda (_) " Keyword")
         :company-kind (lambda (_) 'keyword)
         :exclusive 'no)
   "Extra properties returned by `chezmoi-capf'.")
+
+(defun chezmoi-template--completion-data ()
+  "Return recently queried Chezmoi data for the current base buffer."
+  (with-current-buffer (chezmoi-template--base-buffer)
+    (let ((now (float-time)))
+      (if (and chezmoi-template--completion-data-cache
+               (< (- now (car chezmoi-template--completion-data-cache))
+                  (max 0 chezmoi-template-completion-cache-duration)))
+          (cdr chezmoi-template--completion-data-cache)
+        (let ((data (chezmoi-get-data)))
+          (setq chezmoi-template--completion-data-cache (cons now data))
+          data)))))
 
 (defun chezmoi-template--completion-candidates (selector)
   "Return completion candidates for SELECTOR from `chezmoi-get-data'."
@@ -120,7 +184,8 @@ select a suitable major mode for the template source file.")
                     (when (hash-table-p data)
                       (gethash key data))))
          (data (cl-reduce hashget keys
-                          :initial-value (chezmoi-get-data))))
+                          :initial-value
+                          (chezmoi-template--completion-data))))
     (cond ((hash-table-p data) (hash-table-keys data))
           ((stringp data) (list data))
           (t nil))))
@@ -144,6 +209,86 @@ select a suitable major mode for the template source file.")
              ,(completion-table-dynamic (lambda (_) candidates))
              :category chezmoi-template
              ,@chezmoi-template--completion-properties))))
+
+(defun chezmoi-template--set-parser-hook
+    (enabled registry hook function include-base &optional buffer-or-name)
+  "Set FUNCTION on HOOK in parser buffers when ENABLED.
+REGISTRY is the base-buffer-local variable that tracks installed buffers.
+When INCLUDE-BASE is non-nil, install the hook in the base buffer as well.
+Return non-nil when at least one `gotmpl' parser was found."
+  (let* ((base-buffer (chezmoi-template--base-buffer buffer-or-name))
+         (buffers
+          (cl-delete-if-not
+           #'buffer-live-p (buffer-local-value registry base-buffer)))
+         found)
+    (if enabled
+        (cl-labels ((install ()
+                      (cl-pushnew (current-buffer) buffers)
+                      (add-hook hook function nil t)))
+          (when include-base
+            (with-current-buffer base-buffer
+              (install)))
+          (chezmoi-template--map-gotmpl-spans
+           (lambda (_span)
+             (setq found t)
+             (install))
+           base-buffer)
+          (with-current-buffer base-buffer
+            (set (make-local-variable registry) buffers)))
+      (dolist (buffer buffers)
+        (when (buffer-live-p buffer)
+          (with-current-buffer buffer
+            (remove-hook hook function t))))
+      (with-current-buffer base-buffer
+        (set (make-local-variable registry) nil)))
+    found))
+
+(defun chezmoi-template--install-current-buffer-hook
+    (base-buffer registry hook function)
+  "Install FUNCTION on HOOK and track this buffer in BASE-BUFFER's REGISTRY."
+  (let ((buffer (current-buffer)))
+    (add-hook hook function nil t)
+    (with-current-buffer base-buffer
+      (let ((buffers
+             (cl-delete-if-not
+              #'buffer-live-p (symbol-value registry))))
+        (cl-pushnew buffer buffers)
+        (set registry buffers)))))
+
+(defun chezmoi-template--install-inner-buffer-hooks ()
+  "Install requested Chezmoi hooks in a new Polymode inner buffer."
+  (when-let ((base-buffer (buffer-base-buffer)))
+    (let ((completion-enabled-p
+           (buffer-local-value
+            'chezmoi-template--completion-enabled-p base-buffer))
+          (refresh-enabled-p
+           (buffer-local-value
+            'chezmoi-template--refresh-enabled-p base-buffer)))
+      (when (and (or completion-enabled-p refresh-enabled-p)
+                 (chezmoi-template--gotmpl-parser-p))
+        (when completion-enabled-p
+          (chezmoi-template--install-current-buffer-hook
+           base-buffer 'chezmoi-template--completion-buffers
+           'completion-at-point-functions #'chezmoi-capf))
+        (when refresh-enabled-p
+          (chezmoi-template--install-current-buffer-hook
+           base-buffer 'chezmoi-template--refresh-buffers
+           'after-change-functions #'chezmoi-template--after-change))))))
+
+(defun chezmoi-template-set-completion (enabled &optional buffer-or-name)
+  "Set Chezmoi template completion to ENABLED in BUFFER-OR-NAME.
+In a Polymode buffer, update each inner buffer that owns a `gotmpl' parser.
+Return non-nil when at least one compatible parser was found."
+  (let ((base-buffer (chezmoi-template--base-buffer buffer-or-name)))
+    (with-current-buffer base-buffer
+      (setq chezmoi-template--completion-enabled-p enabled))
+    (prog1
+        (chezmoi-template--set-parser-hook
+         enabled 'chezmoi-template--completion-buffers
+         'completion-at-point-functions #'chezmoi-capf nil base-buffer)
+      (unless enabled
+        (with-current-buffer base-buffer
+          (setq chezmoi-template--completion-data-cache nil))))))
 
 (defun chezmoi-template--selector-action-span (node)
   "Return the complete action span when NODE is its only expression."
@@ -179,7 +324,8 @@ Only direct selector expressions such as `{{ .foo }}' are returned."
       (dolist (capture
                (treesit-query-capture
                 (treesit-buffer-root-node 'gotmpl)
-                '((selector_expression) @selector)
+                '((selector_expression) @selector
+                  (field) @selector)
                 minimum maximum))
         (when-let ((span (chezmoi-template--selector-action-span
                           (cdr capture))))
@@ -191,102 +337,174 @@ Only direct selector expressions such as `{{ .foo }}' are returned."
 (defun chezmoi-template--put-display-value (start end value &optional object)
   "Display the VALUE from START to END in string or buffer OBJECT."
   (unless (string-match-p chezmoi-command-error-regex value)
-    (put-text-property start end 'display value object)
-    (put-text-property start end 'chezmoi t object)
-    (font-lock-flush start end)
-    (font-lock-ensure start end)))
+    (with-silent-modifications
+      (put-text-property start end 'display value object)
+      (put-text-property start end 'chezmoi t object))))
 
 (defun chezmoi-template--remove-display-value (start end &optional object)
-  "Remove displayed template from START to END in OBJECT.
-VALUE is ignored."
+  "Remove the displayed template from START to END in OBJECT."
   (when (and start end)
-    (let ((value (get-text-property start 'display object)))
-      (remove-text-properties start end `(
-                                          display ,value
-                                          chezmoi t)
-                              object)
-      (font-lock-flush start end)
-      (font-lock-ensure start end))))
+    (with-silent-modifications
+      (remove-text-properties start end '(display nil chezmoi nil) object))))
+
+(defun chezmoi-template--batch-token (kind templates)
+  "Return a unique batch token for KIND and TEMPLATES."
+  (format "__chezmoi_mode_%s_%s__"
+          kind
+          (secure-hash
+           'sha1 (format "%S%s%s" templates (current-time) (random)))))
+
+(defun chezmoi-template--selector-keys (template)
+  "Return the field keys from a simple selector TEMPLATE."
+  (let ((start (cond ((string-prefix-p "{{-" template) 3)
+                     ((string-prefix-p "{{" template) 2)))
+        (end (cond ((string-suffix-p "-}}" template) 3)
+                   ((string-suffix-p "}}" template) 2))))
+    (when (and start end)
+      (let ((selector (string-trim
+                       (substring template start (- end)))))
+        (when (string-match-p
+               "\\`\\.[[:alnum:]_.]+\\'" selector)
+          (split-string (substring selector 1) "\\." t))))))
+
+(defun chezmoi-template--dig-expression (template missing-token)
+  "Return a missing-safe expression for selector TEMPLATE.
+Use MISSING-TOKEN as the fallback value."
+  (when-let ((keys (chezmoi-template--selector-keys template)))
+    (format "{{ dig %s %S . }}"
+            (mapconcat #'prin1-to-string keys " ")
+            missing-token)))
+
+(defun chezmoi-template--execute-many (templates)
+  "Execute simple TEMPLATES in one Chezmoi invocation.
+Return nil for selectors whose field path is missing."
+  (cond
+   ((null templates) nil)
+   (t
+    (let* ((delimiter (chezmoi-template--batch-token "separator" templates))
+           (missing-token (chezmoi-template--batch-token "missing" templates))
+           (expressions
+            (mapcar (lambda (template)
+                      (or (chezmoi-template--dig-expression
+                           template missing-token)
+                          template))
+                    templates))
+           (output
+            (chezmoi-template-execute
+             (string-join expressions delimiter)))
+           (values
+            (if (cdr templates)
+                (split-string output (regexp-quote delimiter) nil)
+              (list output))))
+      (unless (= (length values) (length templates))
+        (setq values (make-list (length templates) output)))
+      (mapcar (lambda (value)
+                (unless (string-equal value missing-token)
+                  value))
+              values)))))
 
 (defun chezmoi-template--funcall-over-spans (f spans buffer-or-name)
-  "Call F for SPANS in BUFFER-OR-NAME after executing each expression."
+  "Call F for SPANS in BUFFER-OR-NAME after executing their expressions."
   (with-current-buffer buffer-or-name
-    (dolist (span spans)
-      (let* ((start (car span))
-             (end (cdr span))
-             (template (buffer-substring-no-properties start end))
-             (value (chezmoi-template-execute template)))
-        (funcall f start end value buffer-or-name)))))
+    (let* ((templates
+            (mapcar (lambda (span)
+                      (buffer-substring-no-properties
+                       (car span) (cdr span)))
+                    spans))
+           (values (chezmoi-template--execute-many templates)))
+      (cl-mapc (lambda (span value)
+                 (when value
+                   (funcall f (car span) (cdr span) value buffer-or-name)))
+               spans values))))
 
 (defun chezmoi-template--funcall-over-matches (f buffer-or-name)
   "Call F on each matching template in BUFFER-OR-NAME.
 F is called with the start of the match, the end of the match,
-the template value and BUFFER-OR-NAME."
-  (with-current-buffer buffer-or-name
-    (cond
-     ((and (bound-and-true-p polymode-mode)
-           (fboundp 'pm-map-over-spans))
-      (let ((base-buffer (current-buffer)))
-        (pm-map-over-spans
-         (lambda (span)
-           (when (chezmoi-template--gotmpl-parser-p)
-             (dolist (expression
-                      (chezmoi-template--treesit-expression-spans
-                       (nth 1 span) (nth 2 span)))
-               (with-current-buffer base-buffer
-                 (let* ((start (car expression))
-                        (end (cdr expression))
-                        (template (buffer-substring-no-properties start end))
-                        (value (chezmoi-template-execute template)))
-                   (funcall f start end value base-buffer)))))))))
-     ((chezmoi-template--gotmpl-parser-p)
-      (chezmoi-template--funcall-over-spans
-       f (chezmoi-template--treesit-expression-spans) buffer-or-name)))))
+the template value and BUFFER-OR-NAME.  Return non-nil when a compatible
+parser was found."
+  (let (found spans)
+    (chezmoi-template--map-gotmpl-spans
+     (lambda (span)
+       (setq found t)
+       (setq spans
+             (nconc spans
+                    (chezmoi-template--treesit-expression-spans
+                     (nth 1 span) (nth 2 span)))))
+     buffer-or-name)
+    (chezmoi-template--funcall-over-spans f spans buffer-or-name)
+    found))
 
 (defun chezmoi-template--funcall-over-display-properties (f start buffer-or-name)
   "Call F on each occurrence with display property in BUFFER-OR-NAME.
-F is called with the start of the occurrence, the end of the occurrence,
-the display property value, and BUFFER-OR-NAME.
+F is called with the start and end of the occurrence and BUFFER-OR-NAME.
 When START is non-nil, find only the region around START."
   (with-current-buffer buffer-or-name
-    (let ((end (or start 1))
+    (let ((minimum (point-min))
+          (maximum (point-max))
           (buf (current-buffer)))
       (if start
-          (let* ((start (or (previous-single-property-change
-                             end 'chezmoi buf)
-                            (point-min)))
-                 (end (next-single-property-change start 'chezmoi buf)))
-            (when (and end (> end start))
-              (funcall f start end buffer-or-name)))
-        (while (and (setq start (next-single-property-change end 'chezmoi buf))
-                    (setq end (next-single-property-change start 'chezmoi buf)))
-          (funcall f start end buffer-or-name))))))
+          (let* ((position (min (max start minimum) maximum))
+                 (probe
+                  (cond
+                   ((and (< position maximum)
+                         (get-text-property position 'chezmoi buf))
+                    position)
+                   ((and (> position minimum)
+                         (get-text-property (1- position) 'chezmoi buf))
+                    (1- position)))))
+            (when probe
+              (funcall
+               f
+               (or (previous-single-property-change
+                    (1+ probe) 'chezmoi buf minimum)
+                   minimum)
+               (or (next-single-property-change
+                    probe 'chezmoi buf maximum)
+                   maximum)
+               buffer-or-name)))
+        (let ((position minimum))
+          (while (< position maximum)
+            (let ((end
+                   (or (next-single-property-change
+                        position 'chezmoi buf maximum)
+                       maximum)))
+              (when (get-text-property position 'chezmoi buf)
+                (funcall f position end buffer-or-name))
+              (setq position end))))))))
 
 (defun chezmoi-template-buffer-display (&optional display-p start buffer-or-name)
   "Display templates found in BUFFER-OR-NAME.
 If called interactively, toggle display of templates in current buffer.
 Use DISPLAY-P to set display of templates on or off.
 START is passed to `chezmoi-template--funcall-over-display-properties'."
-  (interactive (list (let ((display-p (not chezmoi-template--buffer-displayed-p)))
-                       (setq-local chezmoi-template-display-p display-p)
-                       display-p)
-                     nil))
-  (let ((buffer-or-name (or buffer-or-name (current-buffer))))
+  (interactive
+   (with-current-buffer (chezmoi-template--base-buffer)
+     (let ((display-p (not chezmoi-template--buffer-displayed-p)))
+       (setq-local chezmoi-template-display-p display-p)
+       (list display-p nil))))
+  (let ((buffer-or-name
+         (chezmoi-template--base-buffer buffer-or-name)))
     (with-current-buffer buffer-or-name
       (chezmoi-template--cancel-display-timer)
-      (remove-hook 'after-change-functions #'chezmoi-template--after-change t)
-      (let ((was-modified-p (buffer-modified-p)))
-        (setq chezmoi-template--buffer-displayed-p
-              (and display-p chezmoi-template-display-p))
-        (if chezmoi-template--buffer-displayed-p
-            (chezmoi-template--funcall-over-matches
-             #'chezmoi-template--put-display-value buffer-or-name)
-          (chezmoi-template--funcall-over-display-properties
-           #'chezmoi-template--remove-display-value start buffer-or-name))
-        (unless was-modified-p
-          (set-buffer-modified-p nil)))
-      (add-hook 'after-change-functions
-                #'chezmoi-template--after-change nil t))))
+      (chezmoi-template--set-refresh nil buffer-or-name)
+      (if (and display-p chezmoi-template-display-p)
+          (setq chezmoi-template--buffer-displayed-p
+                (chezmoi-template--funcall-over-matches
+                 #'chezmoi-template--put-display-value buffer-or-name))
+        (setq chezmoi-template--buffer-displayed-p nil)
+        (chezmoi-template--funcall-over-display-properties
+         #'chezmoi-template--remove-display-value start buffer-or-name))
+      (when (and chezmoi-mode chezmoi-template--buffer-displayed-p)
+        (chezmoi-template--set-refresh t buffer-or-name)))))
+
+(defun chezmoi-template--set-refresh (enabled &optional buffer-or-name)
+  "Set template refresh hooks to ENABLED in BUFFER-OR-NAME and its spans."
+  (let ((base-buffer (chezmoi-template--base-buffer buffer-or-name)))
+    (with-current-buffer base-buffer
+      (setq chezmoi-template--refresh-enabled-p enabled))
+    (chezmoi-template--set-parser-hook
+     enabled 'chezmoi-template--refresh-buffers
+     'after-change-functions #'chezmoi-template--after-change t base-buffer)))
 
 (defun chezmoi-template--cancel-display-timer ()
   "Cancel the pending template display refresh in the current buffer."
@@ -302,13 +520,17 @@ START is passed to `chezmoi-template--funcall-over-display-properties'."
       (when (and chezmoi-mode chezmoi-template-display-p)
         (chezmoi-template-buffer-display t)))))
 
-(defun chezmoi-template-schedule-buffer-display ()
-  "Schedule initial template display for the current buffer."
+(defun chezmoi-template-schedule-buffer-display (&optional parser-found-p)
+  "Schedule initial template display for the current buffer.
+When PARSER-FOUND-P is non-nil, skip checking for a Go Template parser."
   (chezmoi-template--cancel-display-timer)
-  (setq chezmoi-template--display-timer
-        (run-with-idle-timer chezmoi-template-display-delay nil
-                             #'chezmoi-template--display-after-idle
-                             (current-buffer))))
+  (when (and chezmoi-mode
+             chezmoi-template-display-p
+             (or parser-found-p (chezmoi-template-buffer-p)))
+    (setq chezmoi-template--display-timer
+          (run-with-idle-timer chezmoi-template-display-delay nil
+                               #'chezmoi-template--display-after-idle
+                               (current-buffer)))))
 
 (defun chezmoi-template--refresh-after-change (buffer)
   "Refresh displayed templates in BUFFER after an idle delay."
@@ -321,12 +543,18 @@ START is passed to `chezmoi-template--funcall-over-display-properties'."
 
 (defun chezmoi-template--after-change (_ _ _)
   "Schedule a refresh of displayed templates after an idle delay."
-  (when chezmoi-template--buffer-displayed-p
-    (chezmoi-template--cancel-display-timer)
-    (setq chezmoi-template--display-timer
-          (run-with-idle-timer chezmoi-template-display-delay nil
-                               #'chezmoi-template--refresh-after-change
-                               (current-buffer)))))
+  (let ((base-buffer (chezmoi-template--base-buffer)))
+    (with-current-buffer base-buffer
+      (when chezmoi-template--buffer-displayed-p
+        (chezmoi-template--cancel-display-timer)
+        (setq chezmoi-template--display-timer
+              (run-with-idle-timer chezmoi-template-display-delay nil
+                                   #'chezmoi-template--refresh-after-change
+                                   base-buffer))))))
+
+(with-eval-after-load 'polymode-core
+  (add-hook 'polymode-init-inner-hook
+            #'chezmoi-template--install-inner-buffer-hooks))
 
 (provide 'chezmoi-template)
 
