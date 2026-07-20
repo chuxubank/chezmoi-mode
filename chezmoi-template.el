@@ -2,8 +2,8 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.4.4
-;; Package-Requires: ((emacs "29.1") (poly-any-go-template "0.1.0"))
+;; Version: 1.4.5
+;; Package-Requires: ((emacs "29.1") (go-template-ts-mode "0.1.2"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
 ;; Keywords: vc
 
@@ -39,62 +39,31 @@
 (require 'chezmoi-core)
 (require 'cl-lib)
 (require 'go-template-ts-mode)
-(require 'poly-any-go-template)
 
 (declare-function chezmoi-template-source-file-p "chezmoi-core" (file))
-(declare-function chezmoi-template-directory-file-p "chezmoi-core" (file))
-(declare-function chezmoi--unchezmoi-source-file-name "chezmoi" (source-file))
 (declare-function chezmoi-get-data "chezmoi" ())
+(declare-function pm-map-over-spans "polymode-core" (function &optional type))
 
 (defvar chezmoi-mode)
 
-(defun chezmoi-template--normalize-host-filename (filename)
+(defvar chezmoi-template-mode-hook nil
+  "Hook run in Chezmoi template source buffers.
+The hook runs before completion and template display are initialized.  It may
+select a suitable major mode for the template source file.")
+
+(defun chezmoi-template-setup-mode ()
+  "Use `go-template-ts-mode' when the source has no inferred host mode."
+  (when (memq major-mode '(fundamental-mode text-mode))
+    (go-template-ts-mode)))
+
+(add-hook 'chezmoi-template-mode-hook #'chezmoi-template-setup-mode)
+
+(defun chezmoi-template-normalize-host-filename (filename)
   "Translate chezmoi source attributes in host FILENAME."
   (if (and filename chezmoi-root
            (file-in-directory-p filename chezmoi-root))
       (chezmoi--unchezmoi-source-file-name filename)
     filename))
-
-(add-hook 'poly-any-template-host-filename-functions
-          #'chezmoi-template--normalize-host-filename)
-
-(add-to-list 'auto-mode-alist
-             '("/dot_[^/]+\\.\\(?:gotmpl\\|tmpl\\)\\'"
-               . poly-any-go-template-mode))
-
-(defun chezmoi-template--filename-has-host-mode-p (file)
-  "Return non-nil when FILE names a host language after removing `.tmpl'."
-  (file-name-extension
-   (string-remove-suffix ".tmpl" (file-name-nondirectory file))))
-
-(defun chezmoi-template--activate-polymode (file)
-  "Activate Go-template polymode using the host extension in FILE."
-  (let ((buffer-file-name (if (string-suffix-p ".tmpl" file)
-                              file
-                            (concat file ".tmpl"))))
-    (poly-any-go-template-mode)))
-
-(defun chezmoi-template--activate-go-template-mode ()
-  "Use Go-template polymode for Chezmoi template source buffers.
-The current major mode remains the host mode inferred from the target file.
-This is called by `chezmoi-mode' before template display is initialized."
-  (when (and (bound-and-true-p chezmoi-mode)
-             buffer-file-name
-             (chezmoi-template-source-file-p buffer-file-name)
-             (not (bound-and-true-p polymode-mode)))
-    (cond ((and (chezmoi-template-directory-file-p buffer-file-name)
-                (chezmoi-template--filename-has-host-mode-p
-                 buffer-file-name))
-           (chezmoi-template--activate-polymode buffer-file-name))
-          ((chezmoi-template-directory-file-p buffer-file-name)
-           (unless (eq major-mode 'go-template-ts-mode)
-             (go-template-ts-mode)))
-          ((eq major-mode 'go-template-ts-mode))
-          ((memq major-mode '(fundamental-mode text-mode))
-           (go-template-ts-mode))
-          (t
-           (chezmoi-template--activate-polymode buffer-file-name)))
-    (setq-local chezmoi-mode t)))
 
 (defcustom chezmoi-template-display-p t
   "Whether to display templates."
@@ -257,7 +226,8 @@ the template value and BUFFER-OR-NAME."
      ((eq major-mode 'go-template-ts-mode)
       (chezmoi-template--funcall-over-spans
        f (chezmoi-template--treesit-expression-spans) buffer-or-name))
-     ((bound-and-true-p polymode-mode)
+     ((and (bound-and-true-p polymode-mode)
+           (fboundp 'pm-map-over-spans))
       (let ((base-buffer (current-buffer)))
         (pm-map-over-spans
          (lambda (span)

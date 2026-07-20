@@ -1,8 +1,6 @@
 EMACS ?= emacs
-POLYMODE_PATH ?=
-POLY_PATH ?=
 GO_TEMPLATE_PATH ?=
-LOAD_PATH = -L . -L extensions -L test $(foreach path,$(POLYMODE_PATH) $(POLY_PATH) $(GO_TEMPLATE_PATH),-L $(path))
+LOAD_PATH = -L . -L extensions -L test $(foreach path,$(GO_TEMPLATE_PATH),-L $(path))
 SOURCES = chezmoi-core.el chezmoi-template.el chezmoi.el
 EXTENSIONS = extensions/chezmoi-age.el extensions/chezmoi-dired.el \
 	extensions/chezmoi-ediff.el
@@ -13,7 +11,7 @@ PACKAGE_SETUP = \
 	--eval "(package-initialize)" \
 	--eval "(setq load-path (cons \"$(CURDIR)\" (delete \"$(CURDIR)\" load-path)))" \
 	--eval "(setq load-path (cons \"$(CURDIR)/test\" (delete \"$(CURDIR)/test\" load-path)))" \
-	$(foreach path,$(POLYMODE_PATH) $(POLY_PATH) $(GO_TEMPLATE_PATH),--eval "(setq load-path (cons \"$(path)\" (delete \"$(path)\" load-path)))")
+	$(foreach path,$(GO_TEMPLATE_PATH),--eval "(setq load-path (cons \"$(path)\" (delete \"$(path)\" load-path)))")
 
 ARCHIVES = \
 	--eval "(require 'package)" \
@@ -27,9 +25,7 @@ all: compile test
 install-deps:
 	$(EMACS) -Q --batch $(ARCHIVES) \
 		--eval "(package-refresh-contents)" \
-		--eval "(package-install 'polymode)" \
-		--eval "(unless (locate-library \"go-template-ts-mode\") (package-vc-install \"https://github.com/chuxubank/go-template-ts-mode\"))" \
-		--eval "(unless (locate-library \"poly-any-go-template\") (package-vc-install \"https://github.com/chuxubank/poly-any-template\"))"
+		--eval "(unless (locate-library \"go-template-ts-mode\") (package-vc-install \"https://github.com/chuxubank/go-template-ts-mode\"))"
 
 compile:
 	$(EMACS) -Q --batch $(LOAD_PATH) $(PACKAGE_SETUP) \

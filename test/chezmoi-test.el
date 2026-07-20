@@ -6,6 +6,9 @@
 (require 'ert)
 (require 'chezmoi)
 
+(ert-deftest chezmoi-does-not-load-poly-any-go-template ()
+  (should-not (featurep 'poly-any-go-template)))
+
 (ert-deftest chezmoi-find-scripts-is-command ()
   (should (commandp #'chezmoi-find-scripts)))
 
@@ -35,10 +38,10 @@
     (setq buffer-file-name "/tmp/chezmoi/run.sh.tmpl")
     (let ((activated nil)
           (changed-calls 0))
+      (add-hook 'chezmoi-template-mode-hook
+                (lambda () (setq activated t)) nil t)
       (cl-letf (((symbol-function 'chezmoi-changed-p)
                  (lambda (&rest _) (cl-incf changed-calls) nil))
-                ((symbol-function 'chezmoi-template--activate-go-template-mode)
-                 (lambda () (setq activated t)))
                 ((symbol-function 'chezmoi-template-buffer-display)
                  (lambda (&rest _) nil)))
         (chezmoi-mode 1)
@@ -82,17 +85,23 @@
 (ert-deftest chezmoi-normalizes-template-host-filename ()
   (let ((chezmoi-root "/tmp/chezmoi/"))
     (should (equal
-             (poly-any-template--host-filename
-              "/tmp/chezmoi/dot_zprofile.tmpl")
+             (chezmoi-template-normalize-host-filename
+              "/tmp/chezmoi/dot_zprofile")
              "/tmp/chezmoi/.zprofile"))))
 
-(ert-deftest chezmoi-dot-template-uses-target-host-mode ()
-  (let ((chezmoi-root "/tmp/chezmoi/"))
+(ert-deftest chezmoi-template-mode-hook-runs-only-for-template-sources ()
+  (dolist (case '(("/tmp/chezmoi/modify_dot_config" . t)
+                  ("/tmp/chezmoi/config.tmpl" . t)
+                  ("/tmp/chezmoi/config.sh" . nil)))
     (with-temp-buffer
-      (setq buffer-file-name "/tmp/chezmoi/dot_zprofile.tmpl")
-      (set-auto-mode)
-      (should (eq major-mode 'sh-mode))
-      (should polymode-mode))))
+      (setq buffer-file-name (car case))
+      (let ((called nil))
+        (add-hook 'chezmoi-template-mode-hook
+                  (lambda () (setq called t)) nil t)
+        (cl-letf (((symbol-function 'chezmoi-template-schedule-buffer-display)
+                   #'ignore))
+          (chezmoi-mode 1))
+        (should (eq called (cdr case)))))))
 
 (ert-deftest chezmoi-source-file-p-treats-root-as-a-path ()
   (let* ((root (make-temp-file "chezmoi.root" t))
@@ -128,56 +137,6 @@
               (chezmoi--mode-from-path))
             (should (= mode-calls 1))))
       (delete-directory root t))))
-
-(ert-deftest chezmoi-activates-template-polymode-for-host-buffer ()
-  (with-temp-buffer
-    (setq buffer-file-name "/tmp/chezmoi/modify_dot_config")
-    (sh-mode)
-    (let ((chezmoi-root "/tmp/chezmoi/")
-          (activated nil))
-      (setq-local chezmoi-mode t)
-      (cl-letf (((symbol-function 'poly-any-go-template-mode)
-                 (lambda () (setq activated t))))
-        (chezmoi-template--activate-go-template-mode))
-      (should activated))))
-
-(ert-deftest chezmoi-uses-go-template-mode-for-plain-template ()
-  (with-temp-buffer
-    (setq buffer-file-name "/tmp/chezmoi/modify_dot_config")
-    (let ((chezmoi-root "/tmp/chezmoi/"))
-      (setq-local chezmoi-mode t)
-      (chezmoi-template--activate-go-template-mode)
-      (should (eq major-mode 'go-template-ts-mode)))))
-
-(ert-deftest chezmoi-template-directory-uses-go-template-mode-without-host-extension ()
-  (dolist (file '("/tmp/chezmoi/.chezmoitemplates/Brewfile"
-                  "/tmp/chezmoi/.chezmoitemplates/script.tmpl"))
-    (with-temp-buffer
-      (setq buffer-file-name file)
-      (setq-local chezmoi-mode t)
-      (let ((go-template-calls 0)
-            (polymode-calls 0))
-        (cl-letf (((symbol-function 'go-template-ts-mode)
-                   (lambda () (cl-incf go-template-calls)))
-                  ((symbol-function 'poly-any-go-template-mode)
-                   (lambda () (cl-incf polymode-calls))))
-          (chezmoi-template--activate-go-template-mode))
-        (should (= go-template-calls 1))
-        (should (= polymode-calls 0))))))
-
-(ert-deftest chezmoi-template-directory-uses-host-extension-for-polymode ()
-  (dolist (case '(("/tmp/chezmoi/.chezmoitemplates/script.sh"
-                   . "/tmp/chezmoi/.chezmoitemplates/script.sh.tmpl")
-                  ("/tmp/chezmoi/.chezmoitemplates/script.sh.tmpl"
-                   . "/tmp/chezmoi/.chezmoitemplates/script.sh.tmpl")))
-    (with-temp-buffer
-      (setq buffer-file-name (car case))
-      (setq-local chezmoi-mode t)
-      (let (activated-file)
-        (cl-letf (((symbol-function 'poly-any-go-template-mode)
-                   (lambda () (setq activated-file buffer-file-name))))
-          (chezmoi-template--activate-go-template-mode))
-        (should (equal activated-file (cdr case)))))))
 
 (ert-deftest chezmoi-template-uses-treesit-expression-spans ()
   (skip-unless (treesit-ready-p 'gotmpl))
@@ -216,8 +175,7 @@
     (setq buffer-file-name "/tmp/chezmoi/run.sh.tmpl")
     (let ((chezmoi-template-display-delay 10))
       (unwind-protect
-          (cl-letf (((symbol-function 'chezmoi-template--activate-go-template-mode)
-                     #'ignore))
+          (progn
             (chezmoi-mode 1)
             (should (timerp chezmoi-template--display-timer))
             (chezmoi-mode -1)
@@ -230,9 +188,7 @@
     (let ((chezmoi-template-display-delay 10)
           (font-lock-calls 0))
       (unwind-protect
-          (cl-letf (((symbol-function 'chezmoi-template--activate-go-template-mode)
-                     #'ignore)
-                    ((symbol-function 'font-lock-ensure)
+          (cl-letf (((symbol-function 'font-lock-ensure)
                      (lambda (&rest _) (cl-incf font-lock-calls))))
             (chezmoi-mode 1)
             (chezmoi-mode -1)
@@ -253,34 +209,6 @@
         (pcase-let ((`(,beg ,end ,table . ,_) (chezmoi-capf)))
           (should (equal (buffer-substring-no-properties beg end) "o"))
           (should (equal (all-completions "o" table) '("os"))))))))
-
-(ert-deftest chezmoi-template-uses-treesit-in-polymode ()
-  (skip-unless (treesit-ready-p 'gotmpl))
-  (with-temp-buffer
-    (setq buffer-file-name "/tmp/config.sh.tmpl")
-    (insert "echo {{ .chezmoi.os }}\n")
-    (poly-any-go-template-mode)
-    (let (expressions)
-      (cl-letf (((symbol-function 'chezmoi-template-execute)
-                 (lambda (_) "darwin")))
-        (chezmoi-template--funcall-over-matches
-         (lambda (start end value buffer)
-           (push (list (with-current-buffer buffer
-                         (buffer-substring-no-properties start end))
-                       value)
-                 expressions))
-         (current-buffer)))
-      (should (equal expressions '(("{{ .chezmoi.os }}" "darwin")))))))
-
-(ert-deftest chezmoi-does-not-activate-template-polymode-for-nontemplate ()
-  (with-temp-buffer
-    (setq buffer-file-name "/tmp/chezmoi/run.sh")
-    (let ((chezmoi-mode t)
-          (activated nil))
-      (cl-letf (((symbol-function 'poly-any-go-template-mode)
-                 (lambda () (setq activated t))))
-        (chezmoi-template--activate-go-template-mode))
-      (should-not activated))))
 
 (provide 'chezmoi-test)
 ;;; chezmoi-test.el ends here

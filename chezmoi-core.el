@@ -2,7 +2,7 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.4.4
+;; Version: 1.4.5
 ;; Package-Requires: ((emacs "29.1"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
 ;; Keywords: vc
@@ -36,6 +36,7 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'subr-x)
 
 (defgroup chezmoi nil
@@ -108,6 +109,40 @@ When nil, Chezmoi is unavailable or has not reported a source directory."
   '(".literal"
     ".tmpl")
   "Source state attribute suffixes.")
+
+(defun chezmoi--unchezmoi-source-file-name (source-file)
+  "Remove Chezmoi attributes from SOURCE-FILE."
+  (let* ((base-name (file-name-base source-file))
+	 (ext (file-name-extension source-file))
+	 (base-name (if ext
+			(concat (file-name-sans-extension base-name) "." ext)
+		      base-name))
+	 (base-name (cl-reduce (lambda (s attr)
+				 (replace-regexp-in-string attr "" s))
+			       chezmoi-source-state-suffix-attrs
+			       :initial-value base-name))
+	 (dir (file-name-directory source-file))
+	 (dir (when dir
+		(cl-reduce
+		 (lambda (s attr)
+		   (let ((replacement (if (string= "dot_" attr) "." "")))
+		     (replace-regexp-in-string attr replacement s)))
+		 chezmoi-source-state-prefix-attrs
+		 :initial-value dir)))
+	 (stop-parsing nil)
+	 attr)
+    (while (and (not stop-parsing)
+		(setq attr
+		      (cl-some (lambda (candidate)
+				 (when (string-prefix-p candidate base-name)
+				   candidate))
+			       chezmoi-source-state-prefix-attrs)))
+      (when (string= "literal_" attr)
+	(setq stop-parsing t))
+      (setq base-name (substring base-name (length attr)))
+      (when (string= "dot_" attr)
+	(setq base-name (concat "." base-name))))
+    (expand-file-name base-name dir)))
 
 (defun chezmoi-template-directory-file-p (file)
   "Return non-nil when FILE is below a `.chezmoitemplates' directory."

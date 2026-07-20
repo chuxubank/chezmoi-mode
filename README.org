@@ -12,11 +12,11 @@ The recording above demonstrates editing a chezmoi template with source file on 
   Clone this repo or use a package manager.
 
   Go-template source files ending in ~.tmpl~, beginning with ~modify_~, or
-  located below ~.chezmoitemplates~ use ~go-template-ts-mode~ directly when
-  they have no host extension, or ~poly-any-go-template~ when they have one.
-  Inside ~.chezmoitemplates~, the optional ~.tmpl~ suffix is removed before
-  checking for a host extension. Install the packages from
-  [[https://github.com/chuxubank/poly-any-template][poly-any-template]] alongside this package.
+  located below ~.chezmoitemplates~ use ~go-template-ts-mode~ when no host
+  mode has already been inferred.  Other template/host compositions can be
+  selected from ~chezmoi-template-mode-hook~.  The public
+  ~chezmoi-template-normalize-host-filename~ function translates Chezmoi
+  source attributes for integrations that infer a host mode from a filename.
 
   #+begin_src emacs-lisp :noweb yes
 (use-package chezmoi)

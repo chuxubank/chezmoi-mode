@@ -2,8 +2,8 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.4.4
-;; Package-Requires: ((emacs "29.1") (poly-any-go-template "0.1.0")
+;; Version: 1.4.5
+;; Package-Requires: ((emacs "29.1") (go-template-ts-mode "0.1.2")
 ;;                     (transient "0.4.0"))
 ;; Homepage: https://github.com/chuxubank/chezmoi.el
 ;; Keywords: vc
@@ -46,7 +46,6 @@
 
 (defvar chezmoi-mode nil)
 
-(declare-function chezmoi-template--activate-go-template-mode "chezmoi-template" ())
 (declare-function chezmoi-template--after-change "chezmoi-template" (&rest _))
 (declare-function chezmoi-template-buffer-display "chezmoi-template" (&optional display-p start buffer-or-name))
 (declare-function chezmoi-template-schedule-buffer-display "chezmoi-template" ())
@@ -231,30 +230,6 @@ Requires chezmoi to be configured with an external mergetool (emacs, perhaps?)."
 			   :array-type 'list
 			   :null-object nil)))))
 
-(defun chezmoi--unchezmoi-source-file-name (source-file)
-  "Remove chezmoi attributes from SOURCE-FILE."
-  (let* ((base-name (file-name-base source-file))
-	 (ext (file-name-extension source-file))
-	 (base-name (if ext
-			(concat (file-name-sans-extension base-name) "." ext)
-		      base-name))
-	 (base-name (cl-reduce (lambda (s attr) (replace-regexp-in-string attr "" s))
-			       chezmoi-source-state-suffix-attrs
-			       :initial-value base-name))
-	 (dir (file-name-directory source-file))
-	 (dir (when dir (cl-reduce (lambda (s attr) (let ((replacement (if (string= "dot_" attr) "." "")))
-						 (replace-regexp-in-string attr replacement s)))
-				   chezmoi-source-state-prefix-attrs
-				   :initial-value dir)))
-	 (stop-parsing nil)
-	 attr)
-    (while (and (not stop-parsing) (setq attr (cl-some (lambda (attr) (when (string-prefix-p attr base-name) attr)) chezmoi-source-state-prefix-attrs)))
-      (when (string= "literal_" attr) (setq stop-parsing t))
-      (setq base-name (substring base-name (length attr)))
-      (when (string= "dot_" attr) (setq base-name (concat "." base-name))))
-
-    (expand-file-name base-name dir)))
-
 (defun chezmoi--manual-target-file (source-file)
   "Return the target file corresponding to SOURCE-FILE."
   (let* ((to-find (chezmoi--unchezmoi-source-file-name source-file))
@@ -415,8 +390,12 @@ Prefix ARG is passed to `chezmoi-write'."
   (defvar chezmoi-mode-overwrite-destination) ; silence
   (if chezmoi-mode
       (progn
+	(when (and buffer-file-name
+	           (chezmoi-template-source-file-p buffer-file-name))
+	  (run-hooks 'chezmoi-template-mode-hook)
+	  ;; A hook may select a major mode, which resets minor modes.
+	  (setq-local chezmoi-mode t))
 	(add-hook 'after-save-hook #'chezmoi--write-after-save 0 t)
-	(chezmoi-template--activate-go-template-mode)
 	(add-hook 'after-change-functions #'chezmoi-template--after-change nil 1)
 	(add-hook 'completion-at-point-functions #'chezmoi-capf nil t)
 	(chezmoi-template-schedule-buffer-display))
