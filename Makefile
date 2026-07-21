@@ -4,7 +4,7 @@ TEST_DEPS_DIR ?= .test-deps
 TEST_PACKAGE_DIR = $(abspath $(TEST_DEPS_DIR)/elpa)
 TEST_TREE_SITTER_DIR = $(abspath $(TEST_DEPS_DIR)/tree-sitter)
 POLY_ANY_TEMPLATE_URL ?= https://github.com/chuxubank/poly-any-template
-POLY_ANY_TEMPLATE_REV ?= 70e18f77f3a499ec1d6539608dd029bc35818f84
+POLY_ANY_TEMPLATE_REV ?= v0.1.14
 POLY_ANY_TEMPLATE_DIR = $(abspath $(TEST_DEPS_DIR)/poly-any-template)
 POLY_ANY_TEMPLATE_PATHS = $(POLY_ANY_TEMPLATE_DIR)/lisp/shared \
 	$(POLY_ANY_TEMPLATE_DIR)/lisp/go-template
