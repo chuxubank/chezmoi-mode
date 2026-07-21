@@ -90,7 +90,9 @@ The recording above demonstrates editing a chezmoi template with source file on 
   ~extensions~ directory means sibling source files and autoloads remain
   visible on the checkout's load path; it does not isolate their code.
   ~:ignored-files~ only keeps sibling package headers from contributing
-  optional dependencies to the selected package descriptor.
+  optional dependencies to the selected package descriptor.  Because the
+  repository-level ~.elpaignore~ keeps optional extensions out of the main
+  package build, Emacs 30 loads these flat extension entry files from source.
 
   Files below ~chezmoi-root~ enable ~chezmoi-mode~ when visited. Set
   ~chezmoi-auto-enable-mode~ to nil to disable this behavior.
