@@ -2,7 +2,7 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.4.9
+;; Version: 1.4.10
 ;; Package-Requires: ((emacs "29.1"))
 ;; Homepage: https://github.com/chuxubank/chezmoi-mode
 ;; Keywords: vc
@@ -148,7 +148,7 @@ When nil, Chezmoi is unavailable or has not reported a source directory."
 
 ;;;###autoload
 (defun chezmoi-template-source-file-p (file)
-  "Return non-nil when FILE contains a Go template.
+  "Return non-nil if FILE is a Go Template source.
 Chezmoi marks templates with a `.tmpl' suffix or a `modify_' prefix.
 Every file below a `.chezmoitemplates' directory is also a template."
   (when file
@@ -157,6 +157,7 @@ Every file below a `.chezmoitemplates' directory is also a template."
           (string-suffix-p ".tmpl" name)
           (string-prefix-p "modify_" name)))))
 
+;;;###autoload
 (defun chezmoi--mode-from-path ()
   "Activate `chezmoi-mode' in source files based on their path."
   (when (and chezmoi-auto-enable-mode
@@ -165,6 +166,7 @@ Every file below a `.chezmoitemplates' directory is also a template."
              (file-in-directory-p buffer-file-name chezmoi-root))
     (unless chezmoi-mode (chezmoi-mode))))
 
+;;;###autoload
 (add-hook 'find-file-hook #'chezmoi--mode-from-path)
 
 (provide 'chezmoi-core)

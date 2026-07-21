@@ -4,15 +4,19 @@ TEST_DEPS_DIR ?= .test-deps
 TEST_PACKAGE_DIR = $(abspath $(TEST_DEPS_DIR)/elpa)
 TEST_TREE_SITTER_DIR = $(abspath $(TEST_DEPS_DIR)/tree-sitter)
 POLY_ANY_TEMPLATE_URL ?= https://github.com/chuxubank/poly-any-template
-POLY_ANY_TEMPLATE_REV ?= 8962017e91e6fa1d8d507ca07591402ef3d1c9cc
+POLY_ANY_TEMPLATE_REV ?= 70e18f77f3a499ec1d6539608dd029bc35818f84
 POLY_ANY_TEMPLATE_DIR = $(abspath $(TEST_DEPS_DIR)/poly-any-template)
 POLY_ANY_TEMPLATE_PATHS = $(POLY_ANY_TEMPLATE_DIR)/lisp/shared \
 	$(POLY_ANY_TEMPLATE_DIR)/lisp/go-template
 TEST_DEP_PATHS = $(TEST_GO_TEMPLATE_PATH) $(POLY_ANY_TEMPLATE_PATHS)
+TRANSIENT_DIR = $(abspath extensions/chezmoi-transient)
 
 LOAD_PATH = -L . -L extensions -L test
 TEST_LOAD_PATH = $(LOAD_PATH) $(foreach path,$(TEST_DEP_PATHS),-L $(path))
+TRANSIENT_LOAD_PATH = $(LOAD_PATH) -L $(TRANSIENT_DIR)
+TEST_TRANSIENT_LOAD_PATH = $(TEST_LOAD_PATH) -L $(TRANSIENT_DIR)
 SOURCES = chezmoi-core.el chezmoi-template.el chezmoi-mode.el
+TRANSIENT_SOURCE = extensions/chezmoi-transient/chezmoi-transient.el
 EXTENSIONS = extensions/chezmoi-age.el extensions/chezmoi-dired.el \
 	extensions/chezmoi-ediff.el
 OPTIONAL_EXTENSIONS = extensions/chezmoi-magit.el
@@ -38,10 +42,11 @@ ARCHIVES = $(DEPENDENCY_SETUP) \
 	--eval "(package-initialize)"
 
 .PHONY: all install-deps install-poly-test-dep install-test-deps \
-	check-test-deps compile compile-extensions compile-all-extensions \
-	test test-core test-integration clean
+	check-test-deps compile compile-transient compile-extensions \
+	compile-all-extensions test test-autoload test-core test-transient \
+	test-integration clean
 
-all: compile test
+all: compile compile-transient test
 
 install-deps:
 	mkdir -p "$(TEST_PACKAGE_DIR)" "$(TEST_TREE_SITTER_DIR)"
@@ -79,7 +84,12 @@ compile:
 		--eval "(setq byte-compile-error-on-warn t)" \
 		-f batch-byte-compile $(SOURCES)
 
-compile-extensions: compile
+compile-transient: compile
+	$(EMACS) -Q --batch $(TRANSIENT_LOAD_PATH) $(PACKAGE_SETUP) \
+		--eval "(setq byte-compile-error-on-warn t)" \
+		-f batch-byte-compile $(TRANSIENT_SOURCE)
+
+compile-extensions: compile compile-transient
 	$(EMACS) -Q --batch $(LOAD_PATH) -L extensions $(PACKAGE_SETUP) \
 		--eval "(setq byte-compile-error-on-warn t)" \
 		-f batch-byte-compile $(EXTENSIONS)
@@ -89,18 +99,30 @@ compile-all-extensions: compile-extensions
 		--eval "(setq byte-compile-error-on-warn t)" \
 		-f batch-byte-compile $(OPTIONAL_EXTENSIONS)
 
+test-autoload:
+	$(EMACS) -Q --batch $(LOAD_PATH) $(PACKAGE_SETUP) \
+		-l chezmoi-autoload-test \
+		--eval "(ert-run-tests-batch-and-exit)"
+
 test-core:
 	$(EMACS) -Q --batch $(LOAD_PATH) $(PACKAGE_SETUP) \
 		-l chezmoi-test \
 		--eval "(ert-run-tests-batch-and-exit '(not (tag integration)))"
 
+test-transient:
+	$(EMACS) -Q --batch $(TRANSIENT_LOAD_PATH) $(PACKAGE_SETUP) \
+		-l chezmoi-transient-test \
+		--eval "(ert-run-tests-batch-and-exit '(not (tag integration)))"
+
 test-integration: check-test-deps
 	CHEZMOI_TEST_INTEGRATION=1 \
-	$(EMACS) -Q --batch $(TEST_LOAD_PATH) $(TEST_PACKAGE_SETUP) \
+	$(EMACS) -Q --batch $(TEST_TRANSIENT_LOAD_PATH) $(TEST_PACKAGE_SETUP) \
 		-l chezmoi-test \
+		-l chezmoi-host-mode-test \
+		-l chezmoi-transient-test \
 		--eval "(ert-run-tests-batch-and-exit '(tag integration))"
 
-test: test-core test-integration
+test: test-autoload test-core test-transient test-integration
 
 clean:
 	find . -path './$(TEST_DEPS_DIR)' -prune -o -name '*.elc' -exec rm -f {} +

@@ -22,7 +22,14 @@ The recording above demonstrates editing a chezmoi template with source file on 
   #+begin_src emacs-lisp :noweb yes
 (unless (package-installed-p 'chezmoi-mode)
   (package-vc-install "https://github.com/chuxubank/chezmoi-mode"))
+(unless (package-installed-p 'chezmoi-transient)
+  (package-vc-install
+   '(chezmoi-transient
+     :url "https://github.com/chuxubank/chezmoi-mode"
+     :lisp-dir "extensions/chezmoi-transient/")))
 (use-package chezmoi-mode)
+(use-package chezmoi-transient
+  :commands chezmoi-transient)
   #+end_src
 
   Files below ~chezmoi-root~ enable ~chezmoi-mode~ when visited. Set
@@ -68,7 +75,9 @@ make compile-all-extensions
 
 ** Transient
 
-   ~M-x chezmoi-transient~ is the main entry point for common workflows.  It
+   The separately installable ~chezmoi-transient~ package keeps Transient and
+   the optional integration commands out of the main ~chezmoi-mode~ package.
+   ~M-x chezmoi-transient~ is its entry point for common workflows.  It
    groups commands for finding managed files and scripts, applying or syncing
    changes, inspecting status/data/configuration, resolving conflicts, and
    controlling the current Chezmoi buffer.  Enable the ~-f~ infix to force an

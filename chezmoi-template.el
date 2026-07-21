@@ -2,7 +2,7 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.4.9
+;; Version: 1.4.10
 ;; Package-Requires: ((emacs "29.1"))
 ;; Homepage: https://github.com/chuxubank/chezmoi-mode
 ;; Keywords: vc
@@ -49,9 +49,10 @@
 (defvar chezmoi-mode)
 
 (defvar chezmoi-template-mode-hook nil
-  "Hook run in Chezmoi template source buffers.
-The hook runs before completion and template display are initialized.  It may
-select a suitable major mode for the template source file.")
+  "Hook run when a Chezmoi template source needs a template-aware mode.
+It runs before completion and template display are initialized, but is skipped
+when Polymode is already active.  Hook functions may select a suitable major
+mode for the template source file.")
 
 ;;;###autoload
 (defun chezmoi-template-normalize-host-filename (filename)
@@ -315,7 +316,8 @@ Return non-nil when at least one compatible parser was found."
                 (cons start end)))))))))
 
 (defun chezmoi-template--treesit-expression-spans (&optional minimum maximum)
-  "Return simple Go template expression spans in the current buffer.
+  "Return simple Go template expression spans from MINIMUM to MAXIMUM.
+The bounds default to the beginning and end of the current buffer.
 Only direct selector expressions such as `{{ .foo }}' are returned."
   (when (chezmoi-template--gotmpl-parser-p)
     (let ((minimum (or minimum (point-min)))

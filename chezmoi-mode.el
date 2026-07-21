@@ -2,8 +2,8 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.4.9
-;; Package-Requires: ((emacs "29.1") (transient "0.4.0"))
+;; Version: 1.4.10
+;; Package-Requires: ((emacs "29.1"))
 ;; Homepage: https://github.com/chuxubank/chezmoi-mode
 ;; Keywords: vc
 
@@ -38,16 +38,8 @@
 (require 'chezmoi-core)
 (require 'chezmoi-template)
 (require 'cl-lib)
-(require 'custom)
 (require 'json)
-(require 'shell)
 (require 'subr-x)
-(require 'transient)
-
-(autoload 'chezmoi-dired-add-marked-files "chezmoi-dired" nil t)
-(autoload 'chezmoi-ediff "chezmoi-ediff" nil t)
-(autoload 'chezmoi-ediff-merge "chezmoi-ediff" nil t)
-(autoload 'chezmoi-magit-status "chezmoi-magit" nil t)
 
 (defvar chezmoi-mode nil)
 
@@ -147,12 +139,12 @@ Pretty-print the output first when JSON-P is non-nil."
   "Visit SOURCE-FILE, infer its mode from MODE-FILE, and enable Chezmoi.
 Return the visited buffer.  When MODE-FILE is nil, keep the mode selected from
 SOURCE-FILE itself."
-  (find-file source-file)
+  (let ((chezmoi-auto-enable-mode nil))
+    (find-file source-file))
   (when mode-file
     (let ((buffer-file-name mode-file))
       (set-auto-mode t)))
-  (unless chezmoi-mode
-    (chezmoi-mode 1))
+  (chezmoi-mode 1)
   (current-buffer))
 
 ;;;###autoload
@@ -168,102 +160,6 @@ SOURCE-FILE itself."
           'project-file)))
   (chezmoi--open-source-file script))
 
-(defun chezmoi-transient--current-file-p ()
-  "Return non-nil when the current buffer visits a file."
-  buffer-file-name)
-
-(defun chezmoi-transient--base-buffer ()
-  "Return the base buffer for the current Transient context."
-  (or (buffer-base-buffer) (current-buffer)))
-
-(defun chezmoi-transient--mode-description ()
-  "Return a state-aware description for `chezmoi-mode'."
-  (with-current-buffer (chezmoi-transient--base-buffer)
-    (if chezmoi-mode "Disable Chezmoi mode" "Enable Chezmoi mode")))
-
-(defun chezmoi-transient--display-description ()
-  "Return a state-aware description for template display."
-  (with-current-buffer (chezmoi-transient--base-buffer)
-    (if (bound-and-true-p chezmoi-template--buffer-displayed-p)
-        "Hide template values"
-      "Display template values")))
-
-(defun chezmoi-transient--template-buffer-p ()
-  "Return non-nil when template display is available in this buffer."
-  (chezmoi-template-buffer-p (chezmoi-transient--base-buffer)))
-
-(defun chezmoi-transient--extension-available-p (library)
-  "Return non-nil when extension LIBRARY can be loaded."
-  (locate-library library))
-
-(transient-define-suffix chezmoi-transient-write ()
-  "Write the current file, honoring the transient force argument."
-  (interactive)
-  (chezmoi-write buffer-file-name
-                 (member "--force" (transient-args 'chezmoi-transient))))
-
-(transient-define-suffix chezmoi-transient-sync-files ()
-  "Sync changed files, honoring the transient force argument."
-  (interactive)
-  (let ((current-prefix-arg
-         (and (member "--force" (transient-args 'chezmoi-transient))
-              '(4))))
-    (call-interactively #'chezmoi-sync-files)))
-
-(transient-define-suffix chezmoi-transient-toggle-mode ()
-  "Toggle `chezmoi-mode' in the current base buffer."
-  (interactive)
-  (with-current-buffer (chezmoi-transient--base-buffer)
-    (call-interactively #'chezmoi-mode)))
-
-;;;###autoload
-(transient-define-prefix chezmoi-transient ()
-  "Manage Chezmoi source and target files."
-  [["Files"
-    ("f" "Find managed file" chezmoi-find)
-    ("F" "Find script" chezmoi-find-scripts)
-    ("o" "Open source/target" chezmoi-open-other
-     :inapt-if-not chezmoi-transient--current-file-p)
-    ("r" "Open source directory" chezmoi-open-source-directory)]
-   ["Changes"
-    ("-f" "Force apply/save" "--force")
-    ("w" "Write current file" chezmoi-transient-write
-     :inapt-if-not chezmoi-transient--current-file-p)
-    ("s" "Sync changed files" chezmoi-transient-sync-files)
-    ("d" "Show diff" chezmoi-diff)
-    ("S" "Show status" chezmoi-status)]
-   ["Resolve"
-    ("e" "Ediff source/target" chezmoi-ediff
-     :if (lambda ()
-           (chezmoi-transient--extension-available-p "chezmoi-ediff")))
-    ("E" "Ediff with ancestor" chezmoi-ediff-merge
-     :if (lambda ()
-           (chezmoi-transient--extension-available-p "chezmoi-ediff")))
-    ("m" "Run merge" chezmoi-merge)
-    ("M" "Run merge-all" chezmoi-merge-all)
-    ("q" "Stop merge processes" chezmoi-merge-quit)]]
-  [["Inspect"
-    ("D" "Show template data" chezmoi-show-data)
-    ("C" "Show configuration" chezmoi-show-config)
-    ("x" "Run doctor" chezmoi-doctor)
-    ("v" "Show version" chezmoi-version)]
-   ["Current buffer"
-    ("t" "Toggle template values" chezmoi-template-buffer-display
-     :description chezmoi-transient--display-description
-     :inapt-if-not chezmoi-transient--template-buffer-p)
-    ("c" "Toggle Chezmoi mode" chezmoi-transient-toggle-mode
-     :description chezmoi-transient--mode-description
-     :inapt-if-not chezmoi-transient--current-file-p)]
-   ["Integrations"
-    ("g" "Magit source repository" chezmoi-magit-status
-     :if (lambda ()
-           (chezmoi-transient--extension-available-p "chezmoi-magit")))
-    ("a" "Add Dired marked files" chezmoi-dired-add-marked-files
-     :if (lambda ()
-           (and (derived-mode-p 'dired-mode)
-                (chezmoi-transient--extension-available-p
-                 "chezmoi-dired"))))]])
-
 (defun chezmoi-target-file-p (file)
   "Return non-nil if FILE is in the target state."
   (thread-last (chezmoi-managed-files)
@@ -276,12 +172,12 @@ SOURCE-FILE itself."
        (file-in-directory-p file chezmoi-root)))
 
 (defun chezmoi-encrypted-p (file)
-  "Returns non-nil if `FILE' is encrypted in the source state."
+  "Return non-nil if FILE is encrypted in the source state."
   (or (string-match "encrypted_" file)
       (string-match "encrypted_" (or (chezmoi-source-file file) ""))))
 
 (defun chezmoi-template-file-p (file)
-  "Returns non-nil if `FILE' is a chezmoi template file.
+  "Return non-nil if FILE is a Chezmoi template file.
 
 Does not check if the file is managed by chezmoi."
   (when-let ((source-file (if (chezmoi-source-file-p file)
@@ -309,8 +205,8 @@ If ARG is non-nil, switch to the diff-buffer."
 
 ;;;###autoload
 (defun chezmoi-merge (file)
-  "Runs chezmoi merge on `FILE'.
-Requires chezmoi to be configured with an external mergetool (emacs, perhaps?)."
+  "Run chezmoi merge on FILE.
+Requires chezmoi to be configured with an external mergetool such as Emacs."
   (interactive
    (list (chezmoi--completing-read "Select a dotfile to merge: "
                    (chezmoi-changed-files)
@@ -376,7 +272,8 @@ Requires chezmoi to be configured with an external mergetool (emacs, perhaps?)."
   "Return chezmoi data."
   (json-parse-string (apply #'concat (chezmoi--dispatch '("data")))))
 
-(defun chezmoi-get-config()
+(defun chezmoi-get-config ()
+  "Return the effective Chezmoi configuration."
   (let ((v (chezmoi-version)))
     (when (or (and v (string-match-p "^[0-9]" v) (version<= "2.27.0" v)) (string= "dev" v))
       (let ((config-string (apply #'concat (chezmoi--dispatch '("dump-config")))))
@@ -427,8 +324,7 @@ Requires chezmoi to be configured with an external mergetool (emacs, perhaps?)."
 (defun chezmoi-write (&optional file arg)
   "Sync FILE.  How it syncs depends if FILE is in source or target.
 If FILE is in source state, run =chezmoi apply= on the target to overwrite it.
-With prefix ARG, use `shell' to run =chezmoi apply= command.  This is helpful
-for resolving some issues.
+With prefix ARG, pass =--force= to =chezmoi apply=.
 
 If FILE is in target state, copy it to the source buffer without saving.
 With prefix ARG, save the source buffer."
@@ -528,14 +424,15 @@ Prefix ARG is passed to `chezmoi-write'."
       (let ((template-p
              (and buffer-file-name
                   (chezmoi-template-source-file-p buffer-file-name))))
-	(when template-p
-	  (run-hooks 'chezmoi-template-mode-hook)
-	  ;; A hook may select a major mode, which resets minor modes.
-	  (setq-local chezmoi-mode t))
-	(add-hook 'after-save-hook #'chezmoi--write-after-save 0 t)
-	(when (and template-p (chezmoi-template-set-completion t))
-	  (when chezmoi-template-display-p
-	    (chezmoi-template-schedule-buffer-display t))))
+        (when (and template-p
+                   (not (bound-and-true-p polymode-mode)))
+          (run-hooks 'chezmoi-template-mode-hook)
+          ;; A hook may select a major mode, which resets minor modes.
+          (setq-local chezmoi-mode t))
+        (add-hook 'after-save-hook #'chezmoi--write-after-save 0 t)
+        (when (and template-p (chezmoi-template-set-completion t))
+          (when chezmoi-template-display-p
+            (chezmoi-template-schedule-buffer-display t))))
     (progn
       (chezmoi-template-buffer-display nil)
       (chezmoi-template-set-completion nil)
