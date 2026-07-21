@@ -1,4 +1,4 @@
-;;; chezmoi-autoload-test.el --- Autoload tests for chezmoi-mode -*- lexical-binding: t; -*-
+;;; chezmoi-autoload-test.el --- Autoload tests for chezmoi-mode -*- lexical-binding: t; no-native-compile: t; -*-
 
 ;;; Code:
 
@@ -30,6 +30,16 @@
           (loaddefs-generate chezmoi-autoload-test--source-directory
                              autoload-file nil nil nil t)
           (load autoload-file nil t)
+          (dolist (command '(chezmoi-dired-add-marked-files
+                             chezmoi-ediff
+                             chezmoi-ediff-merge
+                             chezmoi-magit-status
+                             chezmoi-transient))
+            (should (autoloadp (symbol-function command))))
+          (dolist (command '(chezmoi-age-get-identity
+                             chezmoi-age-get-recipients))
+            (should-not (fboundp command)))
+          (should-not (featurep 'chezmoi-age))
           (should (memq #'chezmoi--mode-from-path find-file-hook))
           (with-temp-file source-file)
           (setq buffer (find-file-noselect source-file))

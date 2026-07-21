@@ -22,5 +22,5 @@ jobs:
         run: make install-test-deps
       - name: Compile and test
         run: make clean all
-      - name: Compile extensions
-        run: make compile-all-extensions
+      - name: Compile Age extension
+        run: make compile-age

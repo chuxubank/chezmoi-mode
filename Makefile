@@ -9,13 +9,13 @@ POLY_ANY_TEMPLATE_DIR = $(abspath $(TEST_DEPS_DIR)/poly-any-template)
 POLY_ANY_TEMPLATE_PATHS = $(POLY_ANY_TEMPLATE_DIR)/lisp/shared \
 	$(POLY_ANY_TEMPLATE_DIR)/lisp/go-template
 TEST_DEP_PATHS = $(TEST_GO_TEMPLATE_PATH) $(POLY_ANY_TEMPLATE_PATHS)
-LOAD_PATH = -L . -L extensions -L test
+LOAD_PATH = -L . -L test
+AGE_LOAD_PATH = -L . -L extensions/chezmoi-age
 TEST_LOAD_PATH = $(LOAD_PATH) $(foreach path,$(TEST_DEP_PATHS),-L $(path))
-SOURCES = chezmoi-core.el chezmoi-template.el chezmoi-mode.el
-TRANSIENT_SOURCE = extensions/chezmoi-transient.el
-EXTENSIONS = extensions/chezmoi-age.el extensions/chezmoi-dired.el \
-	extensions/chezmoi-ediff.el
-OPTIONAL_EXTENSIONS = extensions/chezmoi-magit.el
+SOURCES = chezmoi-core.el chezmoi-template.el chezmoi-mode.el \
+	chezmoi-dired.el chezmoi-ediff.el chezmoi-magit.el \
+	chezmoi-transient.el
+AGE_SOURCE = extensions/chezmoi-age/chezmoi-age.el
 
 DEPENDENCY_SETUP = \
 	--eval "(setq user-emacs-directory (file-name-as-directory \"$(abspath $(TEST_DEPS_DIR))\"))" \
@@ -38,17 +38,16 @@ ARCHIVES = $(DEPENDENCY_SETUP) \
 	--eval "(package-initialize)"
 
 .PHONY: all install-deps install-poly-test-dep install-test-deps \
-	check-test-deps compile compile-transient compile-extensions \
-	compile-all-extensions test test-autoload test-core test-transient \
+	check-test-deps compile compile-age test test-autoload test-core test-transient \
 	test-integration clean
 
-all: compile compile-transient test
+all: compile test
 
 install-deps:
 	mkdir -p "$(TEST_PACKAGE_DIR)" "$(TEST_TREE_SITTER_DIR)"
 	$(EMACS) -Q --batch $(ARCHIVES) \
 		--eval "(package-refresh-contents)" \
-		--eval "(package-install 'transient)"
+		--eval "(dolist (dependency '(magit transient)) (unless (package-installed-p dependency) (package-install dependency)))"
 
 install-poly-test-dep:
 	mkdir -p "$(TEST_DEPS_DIR)"
@@ -63,8 +62,7 @@ install-poly-test-dep:
 install-test-deps: install-deps install-poly-test-dep
 	$(EMACS) -Q --batch $(ARCHIVES) \
 		--eval "(unless (locate-library \"go-template-ts-mode\") (package-vc-install \"https://github.com/chuxubank/go-template-ts-mode\"))" \
-		--eval "(unless (package-installed-p 'polymode) (package-install 'polymode))" \
-		--eval "(unless (package-installed-p 'magit) (package-install 'magit))"
+		--eval "(unless (package-installed-p 'polymode) (package-install 'polymode))"
 	$(EMACS) -Q --batch $(ARCHIVES) \
 		--eval "(require 'go-template-ts-mode)" \
 		--eval "(unless (treesit-ready-p 'gotmpl) (go-template-ts-mode-install-grammar))"
@@ -80,20 +78,10 @@ compile:
 		--eval "(setq byte-compile-error-on-warn t)" \
 		-f batch-byte-compile $(SOURCES)
 
-compile-transient: compile
-	$(EMACS) -Q --batch $(LOAD_PATH) $(PACKAGE_SETUP) \
+compile-age:
+	$(EMACS) -Q --batch $(AGE_LOAD_PATH) $(PACKAGE_SETUP) \
 		--eval "(setq byte-compile-error-on-warn t)" \
-		-f batch-byte-compile $(TRANSIENT_SOURCE)
-
-compile-extensions: compile compile-transient
-	$(EMACS) -Q --batch $(LOAD_PATH) $(PACKAGE_SETUP) \
-		--eval "(setq byte-compile-error-on-warn t)" \
-		-f batch-byte-compile $(EXTENSIONS)
-
-compile-all-extensions: compile-extensions
-	$(EMACS) -Q --batch $(LOAD_PATH) $(PACKAGE_SETUP) \
-		--eval "(setq byte-compile-error-on-warn t)" \
-		-f batch-byte-compile $(OPTIONAL_EXTENSIONS)
+		-f batch-byte-compile $(AGE_SOURCE)
 
 test-autoload:
 	$(EMACS) -Q --batch $(LOAD_PATH) $(PACKAGE_SETUP) \

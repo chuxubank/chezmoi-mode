@@ -1,4 +1,4 @@
-;;; chezmoi-transient-test.el --- Tests for chezmoi-transient -*- lexical-binding: t; -*-
+;;; chezmoi-transient-test.el --- Tests for chezmoi-transient -*- lexical-binding: t; no-native-compile: t; -*-
 
 ;;; Code:
 

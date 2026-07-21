@@ -1,4 +1,4 @@
-;;; chezmoi-test.el --- Tests for chezmoi -*- lexical-binding: t; -*-
+;;; chezmoi-test.el --- Tests for chezmoi -*- lexical-binding: t; no-native-compile: t; -*-
 
 ;;; Code:
 
@@ -9,13 +9,11 @@
 (defconst chezmoi-test--loaded-transient-p
   (featurep 'transient))
 
-(defconst chezmoi-test--main-extension-bindings
-  (mapcar (lambda (command)
-            (cons command (fboundp command)))
-          '(chezmoi-dired-add-marked-files
-            chezmoi-ediff
-            chezmoi-ediff-merge
-            chezmoi-magit-status)))
+(defconst chezmoi-test--loaded-integration-features
+  (mapcar (lambda (feature)
+            (cons feature (featurep feature)))
+          '(dired ediff magit
+            chezmoi-dired chezmoi-ediff chezmoi-magit)))
 
 (require 'chezmoi-ediff)
 
@@ -41,8 +39,8 @@
 (ert-deftest chezmoi-does-not-load-transient ()
   (should-not chezmoi-test--loaded-transient-p))
 
-(ert-deftest chezmoi-does-not-autoload-extension-commands ()
-  (dolist (entry chezmoi-test--main-extension-bindings)
+(ert-deftest chezmoi-does-not-load-integration-libraries ()
+  (dolist (entry chezmoi-test--loaded-integration-features)
     (should-not (cdr entry))))
 
 (ert-deftest chezmoi-find-scripts-is-command ()

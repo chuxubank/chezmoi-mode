@@ -4,8 +4,6 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.4.10
-;; Package-Requires: ((emacs "29.1") (transient "0.4.0") (chezmoi-mode "1.4.10"))
 ;; Homepage: https://github.com/chuxubank/chezmoi-mode
 ;; Keywords: convenience, vc
 
@@ -26,7 +24,7 @@
 
 ;;; Commentary:
 
-;; Provides a Transient menu for Chezmoi commands and optional integrations.
+;; Provides a Transient menu for Chezmoi commands and bundled integrations.
 
 ;;; Code:
 
@@ -61,10 +59,6 @@
 (defun chezmoi-transient--template-buffer-p ()
   "Return non-nil when template display is available in this buffer."
   (chezmoi-template-buffer-p (chezmoi-transient--base-buffer)))
-
-(defun chezmoi-transient--extension-available-p (library)
-  "Return non-nil when extension LIBRARY can be loaded."
-  (locate-library library))
 
 (transient-define-suffix chezmoi-transient-write ()
   "Write the current file, honoring the transient force argument."
@@ -103,12 +97,8 @@
     ("d" "Show diff" chezmoi-diff)
     ("S" "Show status" chezmoi-status)]
    ["Resolve"
-    ("e" "Ediff source/target" chezmoi-ediff
-     :if (lambda ()
-           (chezmoi-transient--extension-available-p "chezmoi-ediff")))
-    ("E" "Ediff with ancestor" chezmoi-ediff-merge
-     :if (lambda ()
-           (chezmoi-transient--extension-available-p "chezmoi-ediff")))
+    ("e" "Ediff source/target" chezmoi-ediff)
+    ("E" "Ediff with ancestor" chezmoi-ediff-merge)
     ("m" "Run merge" chezmoi-merge)
     ("M" "Run merge-all" chezmoi-merge-all)
     ("q" "Stop merge processes" chezmoi-merge-quit)]]
@@ -125,14 +115,9 @@
      :description chezmoi-transient--mode-description
      :inapt-if-not chezmoi-transient--current-file-p)]
    ["Integrations"
-    ("g" "Magit source repository" chezmoi-magit-status
-     :if (lambda ()
-           (chezmoi-transient--extension-available-p "chezmoi-magit")))
+    ("g" "Magit source repository" chezmoi-magit-status)
     ("a" "Add Dired marked files" chezmoi-dired-add-marked-files
-     :if (lambda ()
-           (and (derived-mode-p 'dired-mode)
-                (chezmoi-transient--extension-available-p
-                 "chezmoi-dired"))))]])
+     :if-mode dired-mode)]])
 
 (provide 'chezmoi-transient)
 ;;; chezmoi-transient.el ends here

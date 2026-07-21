@@ -3,7 +3,7 @@
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
 ;; Version: 1.4.10
-;; Package-Requires: ((emacs "29.1"))
+;; Package-Requires: ((emacs "29.1") (magit "3.0.0") (transient "0.4.0"))
 ;; Homepage: https://github.com/chuxubank/chezmoi-mode
 ;; Keywords: vc
 

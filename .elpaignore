@@ -1,7 +1,3 @@
-extensions/chezmoi-age.el
-extensions/chezmoi-dired.el
-extensions/chezmoi-ediff.el
-extensions/chezmoi-magit.el
-extensions/chezmoi-transient.el
+extensions/*
 resources/*
 test/*

@@ -1,4 +1,4 @@
-;;; chezmoi-host-mode-test.el --- Chezmoi host-mode integration tests -*- lexical-binding: t; -*-
+;;; chezmoi-host-mode-test.el --- Chezmoi host-mode integration tests -*- lexical-binding: t; no-native-compile: t; -*-
 
 ;;; Code:
 
@@ -22,7 +22,7 @@
   "Emacs Lisp host source containing Go Template actions.")
 
 (defun chezmoi-host-mode-test--kill-buffer (buffer)
-  "Kill BUFFER without prompting about test fixture changes."
+  "Kill BUFFER without prompting for a modified test fixture."
   (when (buffer-live-p buffer)
     (with-current-buffer buffer
       (set-buffer-modified-p nil))

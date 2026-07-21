@@ -9,8 +9,25 @@ This package provides convenience functions for interacting with the [[https://c
 The recording above demonstrates editing a chezmoi template with source file on left, command log on top right, and associated target file on bottom right.
 
 * Installation
-  Install the main package and the separately packaged Transient menu directly
-  from the Git repository with ~use-package~ and its ~:vc~ keyword:
+  Install the package directly from the Git repository with ~use-package~ and
+  its ~:vc~ keyword.  The Dired, Ediff, Magit, and Transient integrations are
+  included in the main package and load only when used.
+
+  #+begin_src emacs-lisp :noweb yes
+(use-package chezmoi-mode
+  :vc (:url "https://github.com/chuxubank/chezmoi-mode"
+       :rev :newest))
+  #+end_src
+
+  The Age integration remains a separate package in the same repository:
+
+  #+begin_src emacs-lisp :noweb yes
+(use-package chezmoi-age
+  :vc (:url "https://github.com/chuxubank/chezmoi-mode"
+       :lisp-dir "extensions/chezmoi-age"
+       :rev :newest)
+  :autoload (chezmoi-age-get-identity chezmoi-age-get-recipients))
+  #+end_src
 
   Go-template source files ending in ~.tmpl~, beginning with ~modify_~, or
   located below ~.chezmoitemplates~ can select their major mode from
@@ -19,80 +36,6 @@ The recording above demonstrates editing a chezmoi template with source file on 
   The public
   ~chezmoi-template-normalize-host-filename~ function translates Chezmoi
   source attributes for integrations that infer a host mode from a filename.
-
-  #+begin_src emacs-lisp :noweb yes
-(use-package chezmoi-mode
-  :vc (:url "https://github.com/chuxubank/chezmoi-mode"
-       :rev :newest))
-
-(use-package chezmoi-transient
-  :vc (:url "https://github.com/chuxubank/chezmoi-mode"
-       :lisp-dir "extensions"
-       :main-file "chezmoi-transient.el"
-       :rev :newest
-       :ignored-files ("chezmoi-age.el"
-                       "chezmoi-dired.el"
-                       "chezmoi-ediff.el"
-                       "chezmoi-magit.el"))
-  :commands chezmoi-transient)
-  #+end_src
-
-  The optional integrations have separately installable package files and
-  descriptors in the same repository.  Install the descriptors that you use:
-
-  #+begin_src emacs-lisp :noweb yes
-(use-package chezmoi-age
-  :vc (:url "https://github.com/chuxubank/chezmoi-mode"
-       :lisp-dir "extensions"
-       :main-file "chezmoi-age.el"
-       :rev :newest
-       :ignored-files ("chezmoi-dired.el"
-                       "chezmoi-ediff.el"
-                       "chezmoi-magit.el"
-                       "chezmoi-transient.el"))
-  :autoload (chezmoi-age-get-identity chezmoi-age-get-recipients))
-
-(use-package chezmoi-dired
-  :vc (:url "https://github.com/chuxubank/chezmoi-mode"
-       :lisp-dir "extensions"
-       :main-file "chezmoi-dired.el"
-       :rev :newest
-       :ignored-files ("chezmoi-age.el"
-                       "chezmoi-ediff.el"
-                       "chezmoi-magit.el"
-                       "chezmoi-transient.el"))
-  :commands chezmoi-dired-add-marked-files)
-
-(use-package chezmoi-ediff
-  :vc (:url "https://github.com/chuxubank/chezmoi-mode"
-       :lisp-dir "extensions"
-       :main-file "chezmoi-ediff.el"
-       :rev :newest
-       :ignored-files ("chezmoi-age.el"
-                       "chezmoi-dired.el"
-                       "chezmoi-magit.el"
-                       "chezmoi-transient.el"))
-  :commands (chezmoi-ediff chezmoi-ediff-merge))
-
-(use-package chezmoi-magit
-  :vc (:url "https://github.com/chuxubank/chezmoi-mode"
-       :lisp-dir "extensions"
-       :main-file "chezmoi-magit.el"
-       :rev :newest
-       :ignored-files ("chezmoi-age.el"
-                       "chezmoi-dired.el"
-                       "chezmoi-ediff.el"
-                       "chezmoi-transient.el"))
-  :commands chezmoi-magit-status)
-  #+end_src
-
-  In these recipes, ~:main-file~ is relative to ~:lisp-dir~.  The flat shared
-  ~extensions~ directory means sibling source files and autoloads remain
-  visible on the checkout's load path; it does not isolate their code.
-  ~:ignored-files~ only keeps sibling package headers from contributing
-  optional dependencies to the selected package descriptor.  Because the
-  repository-level ~.elpaignore~ keeps optional extensions out of the main
-  package build, Emacs 30 loads these flat extension entry files from source.
 
   Files below ~chezmoi-root~ enable ~chezmoi-mode~ when visited. Set
   ~chezmoi-auto-enable-mode~ to nil to disable this behavior.
@@ -107,11 +50,10 @@ The recording above demonstrates editing a chezmoi template with source file on 
   #+begin_src shell
 make install-test-deps
 make clean all
-make compile-all-extensions
+make compile-age
   #+end_src
 
-  ~compile-all-extensions~ additionally checks the optional Magit integration
-  when Magit is installed.
+  ~compile-age~ additionally checks the independently packaged Age integration.
 
   Add keybindings to some functions. Or call using ~M-x <cmd>~.
 
@@ -137,18 +79,14 @@ make compile-all-extensions
 
 ** Transient
 
-   The separately installable ~chezmoi-transient~ package keeps Transient and
-   the optional integration commands out of the main ~chezmoi-mode~ package.
-   ~M-x chezmoi-transient~ is its entry point for common workflows.  It
+   ~M-x chezmoi-transient~ opens the bundled menu for common workflows.  It
    groups commands for finding managed files and scripts, applying or syncing
    changes, inspecting status/data/configuration, resolving conflicts, and
    controlling the current Chezmoi buffer.  Enable the ~-f~ infix to force an
    apply from a source file or save an updated source buffer while syncing.
 
-   Ediff and Magit entries appear when their Chezmoi extension libraries are
-   available.  The Dired add command appears only in Dired buffers.  These
-   entries do not make the optional integrations dependencies of the main
-   package.
+   The Ediff and Magit commands are loaded when selected.  The Dired add command
+   appears only in Dired buffers.
 
 * Functions
 
