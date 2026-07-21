@@ -9,14 +9,10 @@ POLY_ANY_TEMPLATE_DIR = $(abspath $(TEST_DEPS_DIR)/poly-any-template)
 POLY_ANY_TEMPLATE_PATHS = $(POLY_ANY_TEMPLATE_DIR)/lisp/shared \
 	$(POLY_ANY_TEMPLATE_DIR)/lisp/go-template
 TEST_DEP_PATHS = $(TEST_GO_TEMPLATE_PATH) $(POLY_ANY_TEMPLATE_PATHS)
-TRANSIENT_DIR = $(abspath extensions/chezmoi-transient)
-
 LOAD_PATH = -L . -L extensions -L test
 TEST_LOAD_PATH = $(LOAD_PATH) $(foreach path,$(TEST_DEP_PATHS),-L $(path))
-TRANSIENT_LOAD_PATH = $(LOAD_PATH) -L $(TRANSIENT_DIR)
-TEST_TRANSIENT_LOAD_PATH = $(TEST_LOAD_PATH) -L $(TRANSIENT_DIR)
 SOURCES = chezmoi-core.el chezmoi-template.el chezmoi-mode.el
-TRANSIENT_SOURCE = extensions/chezmoi-transient/chezmoi-transient.el
+TRANSIENT_SOURCE = extensions/chezmoi-transient.el
 EXTENSIONS = extensions/chezmoi-age.el extensions/chezmoi-dired.el \
 	extensions/chezmoi-ediff.el
 OPTIONAL_EXTENSIONS = extensions/chezmoi-magit.el
@@ -85,17 +81,17 @@ compile:
 		-f batch-byte-compile $(SOURCES)
 
 compile-transient: compile
-	$(EMACS) -Q --batch $(TRANSIENT_LOAD_PATH) $(PACKAGE_SETUP) \
+	$(EMACS) -Q --batch $(LOAD_PATH) $(PACKAGE_SETUP) \
 		--eval "(setq byte-compile-error-on-warn t)" \
 		-f batch-byte-compile $(TRANSIENT_SOURCE)
 
 compile-extensions: compile compile-transient
-	$(EMACS) -Q --batch $(LOAD_PATH) -L extensions $(PACKAGE_SETUP) \
+	$(EMACS) -Q --batch $(LOAD_PATH) $(PACKAGE_SETUP) \
 		--eval "(setq byte-compile-error-on-warn t)" \
 		-f batch-byte-compile $(EXTENSIONS)
 
 compile-all-extensions: compile-extensions
-	$(EMACS) -Q --batch $(LOAD_PATH) -L extensions $(PACKAGE_SETUP) \
+	$(EMACS) -Q --batch $(LOAD_PATH) $(PACKAGE_SETUP) \
 		--eval "(setq byte-compile-error-on-warn t)" \
 		-f batch-byte-compile $(OPTIONAL_EXTENSIONS)
 
@@ -110,13 +106,13 @@ test-core:
 		--eval "(ert-run-tests-batch-and-exit '(not (tag integration)))"
 
 test-transient:
-	$(EMACS) -Q --batch $(TRANSIENT_LOAD_PATH) $(PACKAGE_SETUP) \
+	$(EMACS) -Q --batch $(LOAD_PATH) $(PACKAGE_SETUP) \
 		-l chezmoi-transient-test \
 		--eval "(ert-run-tests-batch-and-exit '(not (tag integration)))"
 
 test-integration: check-test-deps
 	CHEZMOI_TEST_INTEGRATION=1 \
-	$(EMACS) -Q --batch $(TEST_TRANSIENT_LOAD_PATH) $(TEST_PACKAGE_SETUP) \
+	$(EMACS) -Q --batch $(TEST_LOAD_PATH) $(TEST_PACKAGE_SETUP) \
 		-l chezmoi-test \
 		-l chezmoi-host-mode-test \
 		-l chezmoi-transient-test \

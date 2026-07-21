@@ -2,8 +2,8 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Version: 1.4.9
-;; Package-Requires: ((emacs "29.1") (chezmoi-mode "1.4.9"))
+;; Version: 1.4.10
+;; Package-Requires: ((emacs "29.1") (chezmoi-mode "1.4.10"))
 ;; Homepage: https://github.com/chuxubank/chezmoi-mode
 ;; Keywords: vc
 
@@ -191,7 +191,7 @@ Note: Does not run =chezmoi merge=."
                      file
                    (chezmoi-target-file file))))
     (unless (and sourcef targetf)
-      (user-error "Error finding source and target files."))
+      (user-error "Error finding source and target files"))
     (ediff-merge-buffers-with-ancestor
      (if (chezmoi-template-file-p sourcef)
          (chezmoi-template--buffer sourcef)
