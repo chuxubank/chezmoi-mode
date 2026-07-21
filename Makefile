@@ -38,8 +38,8 @@ ARCHIVES = $(DEPENDENCY_SETUP) \
 	--eval "(package-initialize)"
 
 .PHONY: all install-deps install-poly-test-dep install-test-deps \
-	check-test-deps compile compile-age test test-autoload test-core test-transient \
-	test-integration clean
+	check-test-deps compile compile-age test test-autoload test-core test-mode \
+	test-template test-ediff test-transient test-integration clean
 
 all: compile test
 
@@ -90,7 +90,22 @@ test-autoload:
 
 test-core:
 	$(EMACS) -Q --batch $(LOAD_PATH) $(PACKAGE_SETUP) \
-		-l chezmoi-test \
+		-l chezmoi-core-test \
+		--eval "(ert-run-tests-batch-and-exit '(not (tag integration)))"
+
+test-mode:
+	$(EMACS) -Q --batch $(LOAD_PATH) $(PACKAGE_SETUP) \
+		-l chezmoi-mode-test \
+		--eval "(ert-run-tests-batch-and-exit '(not (tag integration)))"
+
+test-template:
+	$(EMACS) -Q --batch $(LOAD_PATH) $(PACKAGE_SETUP) \
+		-l chezmoi-template-test \
+		--eval "(ert-run-tests-batch-and-exit '(not (tag integration)))"
+
+test-ediff:
+	$(EMACS) -Q --batch $(LOAD_PATH) $(PACKAGE_SETUP) \
+		-l chezmoi-ediff-test \
 		--eval "(ert-run-tests-batch-and-exit '(not (tag integration)))"
 
 test-transient:
@@ -101,12 +116,15 @@ test-transient:
 test-integration: check-test-deps
 	CHEZMOI_TEST_INTEGRATION=1 \
 	$(EMACS) -Q --batch $(TEST_LOAD_PATH) $(TEST_PACKAGE_SETUP) \
-		-l chezmoi-test \
+		-l chezmoi-core-test \
+		-l chezmoi-mode-test \
+		-l chezmoi-template-test \
 		-l chezmoi-host-mode-test \
 		-l chezmoi-transient-test \
 		--eval "(ert-run-tests-batch-and-exit '(tag integration))"
 
-test: test-autoload test-core test-transient test-integration
+test: test-autoload test-core test-mode test-template test-ediff \
+	test-transient test-integration
 
 clean:
 	find . -path './$(TEST_DEPS_DIR)' -prune -o -name '*.elc' -exec rm -f {} +
