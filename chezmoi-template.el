@@ -101,12 +101,27 @@ Set this to zero to query Chezmoi on every completion request."
 (defvar chezmoi-template-key-regex "\\."
   "Regex for splitting keys.")
 
+(defun chezmoi-template--gotmpl-parser ()
+  "Return the current buffer's Go Template parser, if any."
+  (let ((buffer (current-buffer)))
+    (cl-find-if
+     (lambda (parser)
+       (and (eq (treesit-parser-language parser) 'gotmpl)
+            (eq (treesit-parser-buffer parser) buffer)))
+     (treesit-parser-list))))
+
 (defun chezmoi-template--gotmpl-parser-p ()
   "Return non-nil when the current buffer has a Go Template parser."
-  (and (treesit-ready-p 'gotmpl)
-       (cl-some (lambda (parser)
-                  (eq (treesit-parser-language parser) 'gotmpl))
-                (treesit-parser-list))))
+  (and (chezmoi-template--gotmpl-parser) t))
+
+(defun chezmoi-template--gotmpl-primary-parser-p ()
+  "Return non-nil when the current inner mode selects a Go Template parser."
+  (if (boundp 'treesit-primary-parser)
+      (when-let ((parser (symbol-value 'treesit-primary-parser)))
+        (eq (treesit-parser-language parser) 'gotmpl))
+    (cl-some (lambda (parser)
+               (eq (treesit-parser-language parser) 'gotmpl))
+             (treesit-parser-list))))
 
 (defun chezmoi-template--base-buffer (&optional buffer-or-name)
   "Return the base buffer for BUFFER-OR-NAME or the current buffer."
@@ -115,24 +130,33 @@ Set this to zero to query Chezmoi on every completion request."
 
 (defun chezmoi-template--map-gotmpl-spans (function &optional buffer-or-name)
   "Call FUNCTION for each Go Template span in BUFFER-OR-NAME.
-FUNCTION receives the Polymode span and runs in the buffer that owns its
-`gotmpl' parser.  A non-Polymode buffer is represented by one full-buffer span."
+FUNCTION receives the Polymode span and its parser, and runs in the buffer
+that owns the parser.  A non-Polymode buffer is represented by one full-buffer
+span."
   (with-current-buffer (chezmoi-template--base-buffer buffer-or-name)
     (if (and (bound-and-true-p polymode-mode)
              (fboundp 'pm-map-over-spans))
-        (save-current-buffer
-          (pm-map-over-spans
-           (lambda (span)
-             (when (chezmoi-template--gotmpl-parser-p)
-               (funcall function span)))))
-      (when (chezmoi-template--gotmpl-parser-p)
-        (funcall function (list nil (point-min) (point-max)))))))
+        (let ((missing (make-symbol "missing"))
+              (no-parser (make-symbol "no-parser"))
+              (parsers (make-hash-table :test #'eq)))
+          (save-current-buffer
+            (pm-map-over-spans
+             (lambda (span)
+               (let ((parser (gethash (current-buffer) parsers missing)))
+                 (when (eq parser missing)
+                   (setq parser (or (chezmoi-template--gotmpl-parser)
+                                    no-parser))
+                   (puthash (current-buffer) parser parsers))
+                 (unless (eq parser no-parser)
+                   (funcall function span parser)))))))
+      (when-let ((parser (chezmoi-template--gotmpl-parser)))
+        (funcall function (list nil (point-min) (point-max)) parser)))))
 
 (defun chezmoi-template-buffer-p (&optional buffer-or-name)
   "Return non-nil when BUFFER-OR-NAME has Go Template capabilities."
   (catch 'gotmpl-parser
     (chezmoi-template--map-gotmpl-spans
-     (lambda (_span) (throw 'gotmpl-parser t))
+     (lambda (_span _parser) (throw 'gotmpl-parser t))
      buffer-or-name)
     nil))
 
@@ -228,7 +252,7 @@ Return non-nil when at least one `gotmpl' parser was found."
             (with-current-buffer base-buffer
               (install)))
           (chezmoi-template--map-gotmpl-spans
-           (lambda (_span)
+           (lambda (_span _parser)
              (setq found t)
              (install))
            base-buffer)
@@ -264,7 +288,7 @@ Return non-nil when at least one `gotmpl' parser was found."
            (buffer-local-value
             'chezmoi-template--refresh-enabled-p base-buffer)))
       (when (and (or completion-enabled-p refresh-enabled-p)
-                 (chezmoi-template--gotmpl-parser-p))
+                 (chezmoi-template--gotmpl-primary-parser-p))
         (when completion-enabled-p
           (chezmoi-template--install-current-buffer-hook
            base-buffer 'chezmoi-template--completion-buffers
@@ -313,17 +337,19 @@ Return non-nil when at least one compatible parser was found."
                        (treesit-node-end node) content-end)))
                 (cons start end)))))))))
 
-(defun chezmoi-template--treesit-expression-spans (&optional minimum maximum)
+(defun chezmoi-template--treesit-expression-spans
+    (&optional minimum maximum parser)
   "Return simple Go template expression spans from MINIMUM to MAXIMUM.
 The bounds default to the beginning and end of the current buffer.
-Only direct selector expressions such as `{{ .foo }}' are returned."
-  (when (chezmoi-template--gotmpl-parser-p)
+Only direct selector expressions such as `{{ .foo }}' are returned.  PARSER,
+when non-nil, is the current buffer's Go Template parser."
+  (when-let ((parser (or parser (chezmoi-template--gotmpl-parser))))
     (let ((minimum (or minimum (point-min)))
           (maximum (or maximum (point-max)))
           spans)
       (dolist (capture
                (treesit-query-capture
-                (treesit-buffer-root-node 'gotmpl)
+                (treesit-parser-root-node parser)
                 '((selector_expression) @selector
                   (field) @selector)
                 minimum maximum))
@@ -424,12 +450,12 @@ the template value and BUFFER-OR-NAME.  Return non-nil when a compatible
 parser was found."
   (let (found spans)
     (chezmoi-template--map-gotmpl-spans
-     (lambda (span)
+     (lambda (span parser)
        (setq found t)
        (setq spans
              (nconc spans
                     (chezmoi-template--treesit-expression-spans
-                     (nth 1 span) (nth 2 span)))))
+                     (nth 1 span) (nth 2 span) parser))))
      buffer-or-name)
     (chezmoi-template--funcall-over-spans f spans buffer-or-name)
     found))

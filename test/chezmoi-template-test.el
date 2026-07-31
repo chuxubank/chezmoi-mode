@@ -20,6 +20,48 @@
                         after-change-functions))
       (should-not chezmoi-template--display-timer))))
 
+(ert-deftest chezmoi-template-map-checks-parser-once-per-buffer ()
+  (with-temp-buffer
+    (setq-local polymode-mode t)
+    (let ((parser-list-calls 0)
+          (ready-calls 0)
+          spans)
+      (cl-letf (((symbol-function 'pm-map-over-spans)
+                 (lambda (function &rest _)
+                   (dotimes (index 60)
+                     (funcall function (list 'body index (1+ index))))))
+                ((symbol-function 'treesit-ready-p)
+                 (lambda (_language)
+                   (cl-incf ready-calls)
+                   t))
+                ((symbol-function 'treesit-parser-list)
+                 (lambda ()
+                   (cl-incf parser-list-calls)
+                   '(gotmpl-parser)))
+                ((symbol-function 'treesit-parser-language)
+                 (lambda (_parser) 'gotmpl))
+                ((symbol-function 'treesit-parser-buffer)
+                 (lambda (_parser) (current-buffer))))
+        (chezmoi-template--map-gotmpl-spans
+         (lambda (span &rest _)
+           (push span spans))))
+      (should (= (length spans) 60))
+      (should (= parser-list-calls 1))
+      (should (= ready-calls 0)))))
+
+(ert-deftest chezmoi-template-ignores-parser-owned-by-another-buffer ()
+  (let ((foreign-buffer (generate-new-buffer " *foreign-parser*")))
+    (unwind-protect
+        (with-temp-buffer
+          (cl-letf (((symbol-function 'treesit-parser-list)
+                     (lambda () '(foreign-parser)))
+                    ((symbol-function 'treesit-parser-language)
+                     (lambda (_parser) 'gotmpl))
+                    ((symbol-function 'treesit-parser-buffer)
+                     (lambda (_parser) foreign-buffer)))
+            (should-not (chezmoi-template--gotmpl-parser))))
+      (kill-buffer foreign-buffer))))
+
 (ert-deftest chezmoi-template-removes-display-properties-from-buffer-start ()
   (with-temp-buffer
     (insert "first middle second")
