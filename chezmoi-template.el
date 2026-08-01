@@ -133,24 +133,32 @@ Set this to zero to query Chezmoi on every completion request."
 FUNCTION receives the Polymode span and its parser, and runs in the buffer
 that owns the parser.  A non-Polymode buffer is represented by one full-buffer
 span."
-  (with-current-buffer (chezmoi-template--base-buffer buffer-or-name)
-    (if (and (bound-and-true-p polymode-mode)
-             (fboundp 'pm-map-over-spans))
-        (let ((missing (make-symbol "missing"))
-              (no-parser (make-symbol "no-parser"))
-              (parsers (make-hash-table :test #'eq)))
-          (save-current-buffer
-            (pm-map-over-spans
-             (lambda (span)
-               (let ((parser (gethash (current-buffer) parsers missing)))
-                 (when (eq parser missing)
-                   (setq parser (or (chezmoi-template--gotmpl-parser)
-                                    no-parser))
-                   (puthash (current-buffer) parser parsers))
-                 (unless (eq parser no-parser)
-                   (funcall function span parser)))))))
-      (when-let ((parser (chezmoi-template--gotmpl-parser)))
-        (funcall function (list nil (point-min) (point-max)) parser)))))
+  (let ((base-buffer (chezmoi-template--base-buffer buffer-or-name))
+        (selected-buffer (window-buffer (selected-window))))
+    (save-excursion
+      ;; Idle timers run in the base buffer while an inner buffer can be visible.
+      (with-current-buffer selected-buffer
+        (save-excursion
+          (with-current-buffer base-buffer
+            (if (and (bound-and-true-p polymode-mode)
+                     (fboundp 'pm-map-over-spans))
+                (let ((missing (make-symbol "missing"))
+                      (no-parser (make-symbol "no-parser"))
+                      (parsers (make-hash-table :test #'eq)))
+                  (pm-map-over-spans
+                   (lambda (span)
+                     (let ((parser
+                            (gethash (current-buffer) parsers missing)))
+                       (when (eq parser missing)
+                         (setq parser (or (chezmoi-template--gotmpl-parser)
+                                          no-parser))
+                         (puthash (current-buffer) parser parsers))
+                       (unless (eq parser no-parser)
+                         (funcall function span parser))))))
+              (when-let ((parser (chezmoi-template--gotmpl-parser)))
+                (funcall function
+                         (list nil (point-min) (point-max))
+                         parser)))))))))
 
 (defun chezmoi-template-buffer-p (&optional buffer-or-name)
   "Return non-nil when BUFFER-OR-NAME has Go Template capabilities."
@@ -446,19 +454,19 @@ Return nil for selectors whose field path is missing."
 (defun chezmoi-template--funcall-over-matches (f buffer-or-name)
   "Call F on each matching template in BUFFER-OR-NAME.
 F is called with the start of the match, the end of the match,
-the template value and BUFFER-OR-NAME.  Return non-nil when a compatible
-parser was found."
-  (let (found spans)
+the template value and BUFFER-OR-NAME.  Return non-nil when at least one
+displayable expression was found."
+  (let (spans)
     (chezmoi-template--map-gotmpl-spans
      (lambda (span parser)
-       (setq found t)
        (setq spans
              (nconc spans
                     (chezmoi-template--treesit-expression-spans
                      (nth 1 span) (nth 2 span) parser))))
      buffer-or-name)
-    (chezmoi-template--funcall-over-spans f spans buffer-or-name)
-    found))
+    (when spans
+      (chezmoi-template--funcall-over-spans f spans buffer-or-name)
+      t)))
 
 (defun chezmoi-template--funcall-over-display-properties (f start buffer-or-name)
   "Call F on each occurrence with display property in BUFFER-OR-NAME.

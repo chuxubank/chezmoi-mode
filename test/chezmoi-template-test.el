@@ -22,12 +22,15 @@
 
 (ert-deftest chezmoi-template-map-checks-parser-once-per-buffer ()
   (with-temp-buffer
+    (insert "contents")
+    (goto-char 3)
     (setq-local polymode-mode t)
     (let ((parser-list-calls 0)
           (ready-calls 0)
           spans)
       (cl-letf (((symbol-function 'pm-map-over-spans)
                  (lambda (function &rest _)
+                   (goto-char (point-max))
                    (dotimes (index 60)
                      (funcall function (list 'body index (1+ index))))))
                 ((symbol-function 'treesit-ready-p)
@@ -47,7 +50,29 @@
            (push span spans))))
       (should (= (length spans) 60))
       (should (= parser-list-calls 1))
-      (should (= ready-calls 0)))))
+      (should (= ready-calls 0))
+      (should (= (point) 3)))))
+
+(ert-deftest chezmoi-template-map-preserves-selected-buffer-point ()
+  (save-window-excursion
+    (let ((selected-buffer
+           (generate-new-buffer " *chezmoi-selected-buffer*")))
+      (unwind-protect
+          (progn
+            (switch-to-buffer selected-buffer)
+            (insert "selected contents")
+            (goto-char 3)
+            (with-temp-buffer
+              (setq-local polymode-mode t)
+              (cl-letf (((symbol-function 'pm-map-over-spans)
+                         (lambda (&rest _)
+                           (with-current-buffer selected-buffer
+                             (goto-char (point-max))))))
+                (chezmoi-template--map-gotmpl-spans #'ignore)))
+            (with-current-buffer selected-buffer
+              (should (= (point) 3)))
+            (should (= (window-point) 3)))
+        (kill-buffer selected-buffer)))))
 
 (ert-deftest chezmoi-template-ignores-parser-owned-by-another-buffer ()
   (let ((foreign-buffer (generate-new-buffer " *foreign-parser*")))
@@ -74,6 +99,22 @@
 
 (ert-deftest chezmoi-template-display-is-enabled-by-default ()
   (should (default-value 'chezmoi-template-display-p)))
+
+(ert-deftest chezmoi-template-display-skips-refresh-without-simple-selectors ()
+  :tags '(integration)
+  (skip-unless (and (fboundp 'poly-any-go-template-mode)
+                    (treesit-ready-p 'gotmpl)))
+  (with-temp-buffer
+    (setq buffer-file-name "/tmp/modify_config.toml")
+    (insert "{{- $value := .chezmoi.os -}}\n{{ $value }}\n")
+    (poly-any-go-template-mode)
+    (setq-local chezmoi-mode t)
+    (chezmoi-template-buffer-display t)
+    (should-not chezmoi-template--buffer-displayed-p)
+    (should-not chezmoi-template--refresh-enabled-p)
+    (should-not chezmoi-template--refresh-buffers)
+    (should-not
+     (text-property-not-all (point-min) (point-max) 'display nil))))
 
 (ert-deftest chezmoi-template-uses-treesit-expression-spans ()
   :tags '(integration)
