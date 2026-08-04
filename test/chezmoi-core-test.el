@@ -38,8 +38,121 @@
   (dolist (entry chezmoi-test--loaded-integration-features)
     (should-not (cdr entry))))
 
-(ert-deftest chezmoi-find-scripts-is-command ()
-  (should (commandp #'chezmoi-find-scripts)))
+(ert-deftest chezmoi-special-source-find-commands-are-commands ()
+  (dolist (command '(chezmoi-find-data
+                     chezmoi-find-externals
+                     chezmoi-find-scripts
+                     chezmoi-find-templates
+                     chezmoi-find-special-file))
+    (should (commandp command))))
+
+(ert-deftest chezmoi-find-scripts-omits-special-directory-from-candidates ()
+  (let* ((root (make-temp-file "chezmoi-source" t))
+         (chezmoi-root (file-name-as-directory root))
+         (script (expand-file-name
+                  ".chezmoiscripts/run_once_setup.sh.tmpl" root))
+         completion-candidates
+         opened-file)
+    (unwind-protect
+        (progn
+          (make-directory (file-name-directory script) t)
+          (with-temp-file script)
+          (cl-letf (((symbol-function 'completing-read)
+                     (lambda (_prompt collection &rest _)
+                       (setq completion-candidates
+                             (all-completions "" collection))
+                       "run_once_setup.sh.tmpl"))
+                    ((symbol-function 'chezmoi--open-source-file)
+                     (lambda (file &optional _)
+                       (setq opened-file file))))
+            (call-interactively #'chezmoi-find-scripts)
+            (should (equal completion-candidates
+                           '("run_once_setup.sh.tmpl")))
+            (should (equal opened-file script))))
+      (delete-directory root t))))
+
+(ert-deftest chezmoi-special-directory-files-separates-directory-types ()
+  (let* ((root (make-temp-file "chezmoi-source" t))
+         (chezmoi-root (file-name-as-directory root))
+         (relative-files
+          '(".chezmoidata/main.toml"
+            ".chezmoiexternals/common.toml.tmpl"
+            ".chezmoiscripts/run_once_setup.sh"
+            ".chezmoitemplates/shared"
+            "dot_config/.chezmoidata/nested.yaml"))
+         (excluded-files
+          '("dot_config/config.el"
+            ".git/.chezmoidata/ignored.yaml")))
+    (unwind-protect
+        (progn
+          (dolist (relative (append relative-files excluded-files))
+            (let ((file (expand-file-name relative root)))
+              (make-directory (file-name-directory file) t)
+              (with-temp-file file)))
+          (dolist (case '((".chezmoidata"
+                           ".chezmoidata/main.toml"
+                           "dot_config/.chezmoidata/nested.yaml")
+                          (".chezmoiexternals"
+                           ".chezmoiexternals/common.toml.tmpl")
+                          (".chezmoiscripts"
+                           ".chezmoiscripts/run_once_setup.sh")
+                          (".chezmoitemplates"
+                           ".chezmoitemplates/shared")))
+            (should
+             (equal
+              (sort (mapcar (lambda (file)
+                              (file-relative-name file root))
+                            (chezmoi-special-directory-files (car case)))
+                    #'string<)
+              (sort (copy-sequence (cdr case)) #'string<)))))
+      (delete-directory root t))))
+
+(ert-deftest chezmoi-special-directory-display-name-omits-matching-component ()
+  (let ((root "/tmp/chezmoi/"))
+    (should
+     (equal
+      (chezmoi--source-file-display-name
+       "/tmp/chezmoi/.chezmoidata/packages.toml"
+       root ".chezmoidata")
+      "packages.toml"))
+    (should
+     (equal
+      (chezmoi--source-file-display-name
+       "/tmp/chezmoi/dot_config/.chezmoidata/packages.toml"
+       root ".chezmoidata")
+      "dot_config/packages.toml"))))
+
+(ert-deftest chezmoi-special-files-honors-chezmoiroot ()
+  (let* ((source-directory (make-temp-file "chezmoi-source" t))
+         (source-root (expand-file-name "home" source-directory))
+         (chezmoi-root (file-name-as-directory source-root))
+         (relative-files
+          '(".chezmoiroot"
+            ".chezmoiversion"
+            "home/.chezmoi.toml.tmpl"
+            "home/.chezmoiignore.tmpl"
+            "home/dot_config/.chezmoidata.yaml"
+            "home/dot_config/.chezmoiexternal.toml.tmpl"))
+         (excluded-files
+          '("home/.chezmoidata.toml.tmpl"
+            "home/.chezmoiignore.local"
+            "home/dot_config/config.el")))
+    (unwind-protect
+        (progn
+          (dolist (relative (append relative-files excluded-files))
+            (let ((file (expand-file-name relative source-directory)))
+              (make-directory (file-name-directory file) t)
+              (with-temp-file file)))
+          (should (equal (chezmoi--source-directory)
+                         (file-name-as-directory source-directory)))
+          (should
+           (equal
+            (sort (mapcar (lambda (file)
+                            (file-relative-name file source-directory))
+                          (chezmoi-special-files))
+                  #'string<)
+            (sort (copy-sequence relative-files) #'string<))))
+      (delete-directory source-directory t))))
 
 (ert-deftest chezmoi-find-scripts-enables-chezmoi-template-support ()
   (let ((script (make-temp-file "run_once_setup.sh" nil ".tmpl"

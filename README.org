@@ -78,13 +78,24 @@ make compile-age
   so template mode selection, completion, display, and synchronization are
   initialized for Chezmoi scripts as well.
 
+  ~chezmoi-find-data~, ~chezmoi-find-externals~, ~chezmoi-find-scripts~, and
+  ~chezmoi-find-templates~ select files from their respective special
+  directories. Each command omits the common source and special-directory
+  components from its completion candidates. ~chezmoi-find-special-file~
+  separately selects one of Chezmoi's special files.
+
 ** Transient
 
    ~M-x chezmoi-transient~ opens the bundled menu for common workflows.  It
-   groups commands for finding managed files and scripts, applying or syncing
-   changes, inspecting status/data/configuration, resolving conflicts, and
-   controlling the current Chezmoi buffer.  Enable the ~-f~ infix to force an
-   apply from a source file or save an updated source buffer while syncing.
+   groups commands for finding managed files and each type of special source
+   file, applying or syncing changes, inspecting status/data/configuration,
+   resolving conflicts, and controlling the current Chezmoi buffer.  Enable
+   the ~-f~ infix to force an apply from a source file or save an updated
+   source buffer while syncing.
+
+   The ~f~ suffix opens a find submenu. Use ~f~, ~d~, ~e~, ~s~, ~t~, or ~.~
+   there to find a managed, data, externals, script, template, or special file,
+   respectively.
 
    The Ediff and Magit commands are loaded when selected.  The Dired add command
    appears only in Dired buffers.

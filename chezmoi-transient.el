@@ -81,11 +81,21 @@
     (call-interactively #'chezmoi-mode)))
 
 ;;;###autoload
+(transient-define-prefix chezmoi-find-transient ()
+  "Find Chezmoi source files."
+  [["Find"
+    ("f" "Managed file" chezmoi-find)
+    ("d" "Data file" chezmoi-find-data)
+    ("e" "Externals file" chezmoi-find-externals)
+    ("s" "Script" chezmoi-find-scripts)
+    ("t" "Template" chezmoi-find-templates)
+    ("." "Special file" chezmoi-find-special-file)]])
+
+;;;###autoload
 (transient-define-prefix chezmoi-transient ()
   "Manage Chezmoi source and target files."
   [["Files"
-    ("f" "Find managed file" chezmoi-find)
-    ("F" "Find script" chezmoi-find-scripts)
+    ("f" "Find source file" chezmoi-find-transient)
     ("o" "Open source/target" chezmoi-open-other
      :inapt-if-not chezmoi-transient--current-file-p)
     ("r" "Open source directory" chezmoi-open-source-directory)]

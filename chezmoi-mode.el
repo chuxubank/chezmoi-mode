@@ -43,6 +43,25 @@
 
 (defvar chezmoi-mode nil)
 
+(defconst chezmoi-special-directory-names
+  '(".chezmoidata"
+    ".chezmoiexternals"
+    ".chezmoiscripts"
+    ".chezmoitemplates")
+  "Chezmoi directories whose contents have special meaning.")
+
+(defconst chezmoi-special-file-name-regexp
+  (rx string-start
+      (or ".chezmoiroot"
+          (seq ".chezmoi." (+ (not ".")) ".tmpl")
+          (seq ".chezmoidata." (+ (not ".")))
+          (seq ".chezmoiignore" (opt ".tmpl"))
+          (seq ".chezmoiremove" (opt ".tmpl"))
+          (seq ".chezmoiexternal." (+ (not ".")) (opt ".tmpl"))
+          ".chezmoiversion")
+      string-end)
+  "Regexp matching Chezmoi special file names.")
+
 (declare-function chezmoi-template-buffer-display "chezmoi-template" (&optional display-p start buffer-or-name))
 (declare-function chezmoi-template-buffer-p "chezmoi-template" (&optional buffer-or-name))
 (declare-function chezmoi-template-schedule-buffer-display "chezmoi-template" (&optional parser-found-p))
@@ -147,18 +166,133 @@ SOURCE-FILE itself."
   (chezmoi-mode 1)
   (current-buffer))
 
+(defun chezmoi--source-directory ()
+  "Return the source directory before `.chezmoiroot' is applied."
+  (when chezmoi-root
+    (or (locate-dominating-file chezmoi-root ".chezmoiroot")
+        chezmoi-root)))
+
+(defun chezmoi--special-directory-component-p (file)
+  "Return non-nil when FILE is below a Chezmoi special directory."
+  (cl-some (lambda (part)
+             (member part chezmoi-special-directory-names))
+           (file-name-split file)))
+
+(defun chezmoi--descend-source-directory-p (directory)
+  "Return non-nil when DIRECTORY can contain active source files."
+  (let ((name (file-name-nondirectory (directory-file-name directory))))
+    (or (not (string-prefix-p "." name))
+        (member name chezmoi-special-directory-names)
+        (chezmoi--special-directory-component-p directory))))
+
+(defun chezmoi--source-files (root)
+  "Return files below ROOT that Chezmoi can treat as source files."
+  (when (file-directory-p root)
+    (directory-files-recursively
+     root "." nil #'chezmoi--descend-source-directory-p)))
+
+(defun chezmoi-special-directory-files (directory-name)
+  "Return files below special directories named DIRECTORY-NAME."
+  (unless (member directory-name chezmoi-special-directory-names)
+    (error "Unknown Chezmoi special directory: %s" directory-name))
+  (when chezmoi-root
+    (cl-remove-if-not
+     (lambda (file)
+       (member directory-name
+               (file-name-split
+                (file-relative-name file chezmoi-root))))
+     (chezmoi--source-files chezmoi-root))))
+
+(defun chezmoi-special-files ()
+  "Return Chezmoi special files in the source directory."
+  (when-let ((root (chezmoi--source-directory)))
+    (cl-remove-if-not
+     (lambda (file)
+       (string-match-p chezmoi-special-file-name-regexp
+                       (file-name-nondirectory file)))
+     (chezmoi--source-files root))))
+
+(defun chezmoi--source-file-display-name (file root &optional directory-name)
+  "Return FILE relative to ROOT, omitting DIRECTORY-NAME when non-nil."
+  (let ((parts (file-name-split (file-relative-name file root))))
+    (when directory-name
+      (setq parts (cl-remove directory-name parts
+                             :test #'string= :count 1)))
+    (string-join parts "/")))
+
+(defun chezmoi--read-source-file (prompt files root &optional directory-name)
+  "Read one of FILES using PROMPT, displaying paths relative to ROOT.
+When DIRECTORY-NAME is non-nil, omit that path component from candidates."
+  (unless files
+    (user-error "No matching Chezmoi source files found"))
+  (let* ((candidates
+          (mapcar (lambda (file)
+                    (cons (chezmoi--source-file-display-name
+                           file root directory-name)
+                          file))
+                  files))
+         (choice
+          (chezmoi--completing-read
+           prompt (mapcar #'car candidates) 'project-file)))
+    (alist-get choice candidates nil nil #'string=)))
+
+(defun chezmoi--open-special-source-file (file)
+  "Visit special source FILE with applicable Chezmoi support."
+  (if (chezmoi--auto-enable-file-p file)
+      (chezmoi--open-source-file file)
+    (find-file file)))
+
+(defun chezmoi--read-special-directory-file (directory-name description)
+  "Read a file below DIRECTORY-NAME using DESCRIPTION in the prompt."
+  (chezmoi--read-source-file
+   (format "Select a %s file: " description)
+   (chezmoi-special-directory-files directory-name)
+   chezmoi-root
+   directory-name))
+
+;;;###autoload
+(defun chezmoi-find-data (file)
+  "Edit FILE from a `.chezmoidata' directory."
+  (interactive
+   (list (chezmoi--read-special-directory-file
+          ".chezmoidata" "data")))
+  (chezmoi--open-special-source-file file))
+
+;;;###autoload
+(defun chezmoi-find-externals (file)
+  "Edit FILE from a `.chezmoiexternals' directory."
+  (interactive
+   (list (chezmoi--read-special-directory-file
+          ".chezmoiexternals" "externals")))
+  (chezmoi--open-special-source-file file))
+
 ;;;###autoload
 (defun chezmoi-find-scripts (script)
-  "Edit a source SCRIPT managed by chezmoi."
+  "Edit SCRIPT from a `.chezmoiscripts' directory."
   (interactive
-   (list (chezmoi--completing-read
-          "Select a script to edit: "
-          (thread-last
-            '("managed" "-i" "scripts" "-p" "source-absolute")
-            chezmoi--dispatch
-            (cl-map 'list #'abbreviate-file-name))
-          'project-file)))
+   (list (chezmoi--read-special-directory-file
+          ".chezmoiscripts" "script")))
   (chezmoi--open-source-file script))
+
+;;;###autoload
+(defun chezmoi-find-templates (file)
+  "Edit FILE from a `.chezmoitemplates' directory."
+  (interactive
+   (list (chezmoi--read-special-directory-file
+          ".chezmoitemplates" "template")))
+  (chezmoi--open-special-source-file file))
+
+;;;###autoload
+(defun chezmoi-find-special-file (file)
+  "Edit Chezmoi special FILE."
+  (interactive
+   (let ((root (chezmoi--source-directory)))
+     (list
+      (chezmoi--read-source-file
+       "Select a special file: "
+       (chezmoi-special-files)
+       root))))
+  (chezmoi--open-special-source-file file))
 
 (defun chezmoi-target-file-p (file)
   "Return non-nil if FILE is in the target state."

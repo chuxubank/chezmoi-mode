@@ -7,14 +7,19 @@
 (require 'chezmoi-transient)
 
 (ert-deftest chezmoi-transient-is-command ()
-  (should (commandp #'chezmoi-transient)))
+  (dolist (command '(chezmoi-transient chezmoi-find-transient))
+    (should (commandp command))))
 
 (ert-deftest chezmoi-transient-exposes-core-workflows ()
-  (dolist (key '("f" "F" "o" "r"
+  (dolist (key '("f" "o" "r"
                  "-f" "w" "s" "d" "S"
                  "m" "M" "q"
                  "D" "C" "x" "v" "t" "c"))
     (should (transient-get-suffix 'chezmoi-transient key))))
+
+(ert-deftest chezmoi-find-transient-separates-source-types ()
+  (dolist (key '("f" "d" "e" "s" "t" "."))
+    (should (transient-get-suffix 'chezmoi-find-transient key))))
 
 (ert-deftest chezmoi-transient-version-suffix-is-a-command ()
   (should (commandp #'chezmoi-version)))
