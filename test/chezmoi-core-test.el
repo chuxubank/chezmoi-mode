@@ -143,8 +143,8 @@
             (let ((file (expand-file-name relative source-directory)))
               (make-directory (file-name-directory file) t)
               (with-temp-file file)))
-          (should (equal (chezmoi--source-directory)
-                         (file-name-as-directory source-directory)))
+          (should (file-equal-p (chezmoi--source-directory)
+                                source-directory))
           (should
            (equal
             (sort (mapcar (lambda (file)
