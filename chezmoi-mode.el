@@ -168,9 +168,14 @@ SOURCE-FILE itself."
 
 (defun chezmoi--source-directory ()
   "Return the source directory before `.chezmoiroot' is applied."
-  (when chezmoi-root
-    (or (locate-dominating-file chezmoi-root ".chezmoiroot")
-        chezmoi-root)))
+  (when-let ((root (chezmoi--source-root)))
+    (or (locate-dominating-file root ".chezmoiroot")
+        root)))
+
+(defun chezmoi--source-root ()
+  "Return `chezmoi-root', retrying auto-detection when unavailable."
+  (or chezmoi-root
+      (setq chezmoi-root (chezmoi--default-root))))
 
 (defun chezmoi--special-directory-component-p (file)
   "Return non-nil when FILE is below a Chezmoi special directory."
@@ -195,13 +200,13 @@ SOURCE-FILE itself."
   "Return files below special directories named DIRECTORY-NAME."
   (unless (member directory-name chezmoi-special-directory-names)
     (error "Unknown Chezmoi special directory: %s" directory-name))
-  (when chezmoi-root
+  (when-let ((root (chezmoi--source-root)))
     (cl-remove-if-not
      (lambda (file)
        (member directory-name
                (file-name-split
-                (file-relative-name file chezmoi-root))))
-     (chezmoi--source-files chezmoi-root))))
+                (file-relative-name file root))))
+     (chezmoi--source-files root))))
 
 (defun chezmoi-special-files ()
   "Return Chezmoi special files in the source directory."
@@ -244,11 +249,12 @@ When DIRECTORY-NAME is non-nil, omit that path component from candidates."
 
 (defun chezmoi--read-special-directory-file (directory-name description)
   "Read a file below DIRECTORY-NAME using DESCRIPTION in the prompt."
-  (chezmoi--read-source-file
-   (format "Select a %s file: " description)
-   (chezmoi-special-directory-files directory-name)
-   chezmoi-root
-   directory-name))
+  (let ((files (chezmoi-special-directory-files directory-name)))
+    (chezmoi--read-source-file
+     (format "Select a %s file: " description)
+     files
+     chezmoi-root
+     directory-name)))
 
 ;;;###autoload
 (defun chezmoi-find-data (file)

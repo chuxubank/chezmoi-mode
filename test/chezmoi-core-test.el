@@ -46,6 +46,21 @@
                      chezmoi-find-special-file))
     (should (commandp command))))
 
+(ert-deftest chezmoi-special-source-finders-refresh-unavailable-root ()
+  (let* ((root (make-temp-file "chezmoi-source" t))
+         (chezmoi-root nil)
+         (data-file (expand-file-name ".chezmoidata/data.toml" root)))
+    (unwind-protect
+        (progn
+          (make-directory (file-name-directory data-file) t)
+          (with-temp-file data-file)
+          (cl-letf (((symbol-function 'chezmoi--default-root)
+                     (lambda () (file-name-as-directory root))))
+            (should (equal (chezmoi-special-directory-files ".chezmoidata")
+                           (list data-file)))
+            (should (file-equal-p chezmoi-root root))))
+      (delete-directory root t))))
+
 (ert-deftest chezmoi-find-scripts-omits-special-directory-from-candidates ()
   (let* ((root (make-temp-file "chezmoi-source" t))
          (chezmoi-root (file-name-as-directory root))
