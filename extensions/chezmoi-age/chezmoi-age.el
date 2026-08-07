@@ -4,7 +4,7 @@
 ;; Maintainer: Harrison Pielke-Lombardo
 ;; Version: 1.4.10
 ;; Package-Requires: ((emacs "29.1") (age "0.1.4") (chezmoi-mode "1.4.10"))
-;; Homepage: https://github.com/chuxubank/chezmoi-mode
+;; Homepage: https://github.com/cat-emacs/chezmoi-mode
 ;; Keywords: vc
 
 

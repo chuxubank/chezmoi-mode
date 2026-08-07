@@ -15,7 +15,7 @@ The recording above demonstrates editing a chezmoi template with source file on 
 
   #+begin_src emacs-lisp :noweb yes
 (use-package chezmoi-mode
-  :vc (:url "https://github.com/chuxubank/chezmoi-mode"
+  :vc (:url "https://github.com/cat-emacs/chezmoi-mode"
        :rev :newest))
   #+end_src
 
@@ -23,7 +23,7 @@ The recording above demonstrates editing a chezmoi template with source file on 
 
   #+begin_src emacs-lisp :noweb yes
 (use-package chezmoi-age
-  :vc (:url "https://github.com/chuxubank/chezmoi-mode"
+  :vc (:url "https://github.com/cat-emacs/chezmoi-mode"
        :lisp-dir "extensions/chezmoi-age"
        :rev :newest)
   :autoload (chezmoi-age-get-identity chezmoi-age-get-recipients))
@@ -211,7 +211,7 @@ make compile-age
 
 (defun chezmoi/init-chezmoi-mode ()
   (use-package chezmoi-mode
-    :vc (:url "https://github.com/chuxubank/chezmoi-mode"
+    :vc (:url "https://github.com/cat-emacs/chezmoi-mode"
          :rev :newest)
     :init
     (spacemacs/declare-prefix "f d" "chezmoi")

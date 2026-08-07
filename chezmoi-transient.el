@@ -4,7 +4,7 @@
 
 ;; Author: Harrison Pielke-Lombardo
 ;; Maintainer: Harrison Pielke-Lombardo
-;; Homepage: https://github.com/chuxubank/chezmoi-mode
+;; Homepage: https://github.com/cat-emacs/chezmoi-mode
 ;; Keywords: convenience, vc
 
 ;; This file is not part of GNU Emacs.
