@@ -1,27 +1,31 @@
 #+title: chezmoi-mode
 
-This package provides convenience functions for interacting with the [[https://chezmoi.io/][chezmoi]] dotfile management system via Emacs. These are mostly equivalents to functions like ~find-file~ and ~save-buffer~.
+~chezmoi-mode~ provides Emacs commands for editing and synchronizing files
+managed by [[https://chezmoi.io/][chezmoi]].  It works with chezmoi's source and target states,
+and includes support for templates, Dired, Ediff, Magit, and Transient.
 
 [[https://melpa.org/#/chezmoi-mode][file:https://melpa.org/packages/chezmoi-mode-badge.svg]]
 
 [[file:resources/chezmoi-template-recording.gif]]
 
-The recording above demonstrates editing a chezmoi template with source file on left, command log on top right, and associated target file on bottom right.
+The recording shows a chezmoi template source file on the left, the command
+log on the top right, and the rendered target file on the bottom right.
 
 * Installation
-  Install the package directly from the Git repository with ~use-package~ and
-  its ~:vc~ keyword.  The Dired, Ediff, Magit, and Transient integrations are
+
+  Install the package from the Git repository with ~use-package~ and its
+  ~:vc~ keyword.  The Dired, Ediff, Magit, and Transient integrations are
   included in the main package and load only when used.
 
-  #+begin_src emacs-lisp :noweb yes
+  #+begin_src emacs-lisp
 (use-package chezmoi-mode
   :vc (:url "https://github.com/cat-emacs/chezmoi-mode"
        :rev :newest))
   #+end_src
 
-  The Age integration remains a separate package in the same repository:
+  The optional Age integration is packaged separately in the same repository:
 
-  #+begin_src emacs-lisp :noweb yes
+  #+begin_src emacs-lisp
 (use-package chezmoi-age
   :vc (:url "https://github.com/cat-emacs/chezmoi-mode"
        :lisp-dir "extensions/chezmoi-age"
@@ -29,24 +33,161 @@ The recording above demonstrates editing a chezmoi template with source file on 
   :autoload (chezmoi-age-get-identity chezmoi-age-get-recipients))
   #+end_src
 
-  Go-template source files ending in ~.tmpl~, beginning with ~modify_~, or
-  located below ~.chezmoitemplates~ can select their major mode from
-  ~chezmoi-template-mode-hook~.  When the resulting buffer has a ~gotmpl~
-  Tree-sitter parser, Chezmoi completion and template display are enabled.
-  The public
-  ~chezmoi-template-normalize-host-filename~ function translates Chezmoi
-  source attributes for integrations that infer a host mode from a filename.
+  ~chezmoi~ must be installed and configured.  Template display and
+  completion additionally require a Go Template Tree-sitter parser.  The
+  package can use a mode selected by ~chezmoi-template-mode-hook~, such as
+  ~go-template-ts-mode~, for source files ending in ~.tmpl~, beginning with
+  ~modify_~, or located below ~.chezmoitemplates~.
 
-  Files below ~chezmoi-root~ enable ~chezmoi-mode~ when visited, except for
-  Chezmoi data files below ~.chezmoidata/~ or named ~.chezmoidata.*~. Set
-  ~chezmoi-auto-enable-mode~ to nil to disable this behavior.
+* Quick start
 
-  Template values are displayed by default. Customize
-  ~chezmoi-template-display-p~ to nil to keep the source expressions visible.
-  The display can also be toggled per buffer with
-  ~chezmoi-template-buffer-display~.
+  ~chezmoi-find~ selects a managed target file, opens its source file, and
+  enables ~chezmoi-mode~.  If the source and target are synchronized when the
+  source is opened, saving the source automatically applies it to the target.
 
-  For development, install the package dependencies and run the checks with:
+  #+begin_src emacs-lisp
+(global-set-key (kbd "C-c C f") #'chezmoi-find)
+(global-set-key (kbd "C-c C s") #'chezmoi-write)
+  #+end_src
+
+  You can also enable or disable the minor mode with ~M-x chezmoi-mode~.
+  Visiting a file below ~chezmoi-root~ enables it automatically, except for
+  data files below ~.chezmoidata/~ or files named ~.chezmoidata.*~.  Set
+  ~chezmoi-auto-enable-mode~ to nil to disable automatic activation.
+
+  For a menu of the common commands, run ~M-x chezmoi-transient~.
+
+* Source and target states
+
+  Chezmoi stores a source state and applies it to a target file.  The main
+  commands for moving between these states are:
+
+  | Command                 | Description                                      |
+  |-------------------------+--------------------------------------------------|
+  | ~chezmoi-find~           | Open the source for a managed target file.       |
+  | ~chezmoi-write~          | Apply source to target, or copy target to source. |
+  | ~chezmoi-sync-files~     | Interactively sync multiple changed files.      |
+  | ~chezmoi-open-other~     | Open the corresponding source or target file.   |
+  | ~chezmoi-diff~           | Show the output of ~chezmoi diff~.               |
+  | ~chezmoi-ediff~          | Compare and resolve source and target states.   |
+  | ~chezmoi-merge~          | Run chezmoi's configured external merge tool.   |
+
+  When called in a target buffer, ~chezmoi-write~ copies the target contents
+  into the source buffer without saving it.  Call it with a prefix argument to
+  save that source buffer.  When called in a source buffer, it applies the
+  source to the target; a prefix argument passes ~--force~ to chezmoi.
+
+  The commands ~chezmoi-find-data~, ~chezmoi-find-externals~,
+  ~chezmoi-find-scripts~, ~chezmoi-find-templates~, and
+  ~chezmoi-find-special-file~ select files from chezmoi's special source
+  directories and files.  ~chezmoi-find-scripts~ uses the same source-opening
+  path as ~chezmoi-find~, so template mode selection and synchronization are
+  initialized for Chezmoi scripts as well.
+
+  The following table summarizes the closest chezmoi and Emacs equivalents:
+
+  | Emacs command | chezmoi command | chezmoi-mode command |
+  |---------------+-----------------+----------------------|
+  | ~find-file~   | ~chezmoi edit~  | ~chezmoi-find~       |
+  | ~save-buffer~ | ~chezmoi apply~ | ~chezmoi-write~      |
+  | ~diff~        | ~chezmoi diff~  | ~chezmoi-diff~       |
+  | ~ediff~       | ~chezmoi merge~ | ~chezmoi-ediff~      |
+  | ~magit-status~| ~git status~    | ~chezmoi-magit-status~ |
+
+* Templates
+
+  For template source buffers, ~chezmoi-mode~ displays the values of
+  [[https://www.chezmoi.io/user-guide/templating/][chezmoi template]] selectors
+  using text properties.  It also provides completion through Emacs'
+  standard completion-at-point protocol when a ~gotmpl~ Tree-sitter parser is
+  available.
+
+  Toggle displayed values with ~M-x chezmoi-template-buffer-display~, or set
+  the default with:
+
+  #+begin_src emacs-lisp
+(setq-default chezmoi-template-display-p t)   ; Display values by default.
+(setq-default chezmoi-template-display-p nil) ; Keep template expressions visible.
+  #+end_src
+
+  ~chezmoi-template-display-p~ can also be made buffer-local with ~setq~.  The
+  ~chezmoi-template-mode-hook~ hook can select the major mode used for a
+  template source.  The public function
+  ~chezmoi-template-normalize-host-filename~ removes chezmoi source
+  attributes when another integration needs to infer a host mode from a
+  filename.
+
+* Integrations
+
+  ** Transient
+
+     ~M-x chezmoi-transient~ opens a menu for finding files, applying and
+     syncing changes, inspecting status and configuration, resolving
+     conflicts, and controlling the current buffer.  Its ~-f~ infix forces an
+     apply or saves an updated source buffer while syncing.
+
+  ** Dired
+
+     In a Dired buffer, mark files and call
+     ~chezmoi-dired-add-marked-files~ to add them to chezmoi.
+
+  ** Ediff
+
+     Use ~chezmoi-ediff~ to compare source and target states, or
+     ~chezmoi-ediff-merge~ to include the common ancestor when resolving a
+     conflict.  Use ~chezmoi-diff~ when a raw diff buffer is sufficient.
+
+  ** Magit
+
+     ~chezmoi-magit-status~ opens Magit for the chezmoi source repository.
+
+  ** Evil and ligatures
+
+     Template display can be toggled while entering and leaving Evil insert
+     state.  Overlaid template values may also render poorly with ligatures;
+     the following hook disables them in chezmoi buffers:
+
+     #+begin_src emacs-lisp
+(defun my-chezmoi-evil-template-display ()
+  (if (eq evil-state 'insert)
+      (chezmoi-template-buffer-display nil (point))
+    (chezmoi-template-buffer-display t)))
+(add-hook 'evil-normal-state-entry-hook #'my-chezmoi-evil-template-display)
+(add-hook 'evil-insert-state-entry-hook #'my-chezmoi-evil-template-display)
+
+(with-eval-after-load 'ligature
+  (add-hook 'chezmoi-mode-hook
+            (lambda () (ligature-mode (if chezmoi-mode 0 1)))))
+     #+end_src
+
+  ** Org Babel
+
+     To apply a tangled source file after Org Babel finishes, add
+     ~chezmoi-write~ to ~org-babel-post-tangle-hook~:
+
+     #+begin_src emacs-lisp
+(add-hook 'org-babel-post-tangle-hook #'chezmoi-write)
+     #+end_src
+
+* Configuration
+
+  The most useful options are:
+
+  | Option                             | Purpose                                      |
+  |------------------------------------+----------------------------------------------|
+  | ~chezmoi-command~                  | Path or name of the chezmoi executable.      |
+  | ~chezmoi-root~                     | Chezmoi source directory.                    |
+  | ~chezmoi-auto-enable-mode~         | Automatically enable mode under the root.    |
+  | ~chezmoi-mode-overwrite-destination~ | Always allow saves to overwrite the target. |
+  | ~chezmoi-template-display-p~       | Display rendered template values.            |
+  | ~chezmoi-template-display-delay~   | Idle delay before refreshing displayed values. |
+  | ~chezmoi-template-completion-cache-duration~ | Template data cache duration. |
+
+  Customize these variables with ~M-x customize-group RET chezmoi-mode-settings~.
+
+* Development
+
+  Install the test dependencies and run the checks with:
 
   #+begin_src shell
 make install-test-deps
@@ -54,210 +195,5 @@ make clean all
 make compile-age
   #+end_src
 
-  ~compile-age~ additionally checks the independently packaged Age integration.
-
-  Add keybindings to some functions. Or call using ~M-x <cmd>~.
-
-  #+begin_src emacs-lisp :noweb yes
-(global-set-key (kbd "C-c C f")  #'chezmoi-find)
-(global-set-key (kbd "C-c C s")  #'chezmoi-write)
-  #+end_src
-
-  You can manually call ~M-x chezmoi-mode~ in a source file buffer to turn
-  synchronization on or off. Template buffers additionally get completion and
-  template rendering (see [[Templates]]). When using ~chezmoi-find~ or
-  ~chezmoi-ediff~, ~chezmoi-mode~ is turned on for the source file buffer.
-
-* Usage
-  One of the main goals of this package is to allow users to access their files managed by chezmoi and sync changes in the source state with the target state files that are used. Opening source state files is done using ~chezmoi-find~. This opens a buffer for the source state and adds a hook to sync it with the corresponding target state file when changes are saved. However, to prevent overwriting changes that were made to the target state file outside of the source state (such as by auto-generated content), this hook is only added when the source and target states are in sync at the time of opening.
-
-  You can overwrite the target state file manually by calling ~chezmoi-write~ from within the source state buffer. Alternatively, you can overwrite the source state file with the content from the current target state file using ~chezmoi-write~. This can be performed for several files in a row using ~chezmoi-sync-files~.
-
-  Quickly jump to the corresponding target file or source file using ~chezmoi-open-other~.
-  ~chezmoi-find-scripts~ uses the same source-opening path as ~chezmoi-find~,
-  so template mode selection, completion, display, and synchronization are
-  initialized for Chezmoi scripts as well.
-
-  ~chezmoi-find-data~, ~chezmoi-find-externals~, ~chezmoi-find-scripts~, and
-  ~chezmoi-find-templates~ select files from their respective special
-  directories. Each command omits the common source and special-directory
-  components from its completion candidates. ~chezmoi-find-special-file~
-  separately selects one of Chezmoi's special files.
-
-** Transient
-
-   ~M-x chezmoi-transient~ opens the bundled menu for common workflows.  It
-   groups commands for finding managed files and each type of special source
-   file, applying or syncing changes, inspecting status/data/configuration,
-   resolving conflicts, and controlling the current Chezmoi buffer.  Enable
-   the ~-f~ infix to force an apply from a source file or save an updated
-   source buffer while syncing.
-
-   The ~f~ suffix opens a find submenu. Use ~f~, ~d~, ~e~, ~s~, ~t~, or ~.~
-   there to find a managed, data, externals, script, template, or special file,
-   respectively.
-
-   The Ediff and Magit commands are loaded when selected.  The Dired add command
-   appears only in Dired buffers.
-
-* Functions
-
-  Some functions provided are direct equivalents to common emacs functions.
-
-  | Function     | chezmoi equivalent | chezmoi-mode               |
-  |--------------+--------------------+----------------------------|
-  | find-file    | chezmoi edit       | ~chezmoi\vertfind~         |
-  | save-buffer  | chezmoi apply      | ~chezmoi\vertwrite~        |
-  | diff         | chezmoi diff       | ~chezmoi\vertdiff~         |
-  | ediff        | chezmoi merge      | ~chezmoi\vertediff~        |
-  | magit-status | chezmoi git status | ~chezmoi\vertmagit-status~ |
-
-* Templates
-
-  chezmoi-mode displays the values of [[https://www.chezmoi.io/user-guide/templating/][chezmoi template]] selectors with text
-  properties in template source buffers. You can toggle their display with
-  ~M-x chezmoi-template-buffer-display~ or with a configuration variable:
-
-  #+begin_src emacs-lisp :noweb yes
-(setq-default chezmoi-template-display-p t)   ;; Display template values in all source buffers.
-(setq chezmoi-template-display-p t)           ;; Display template values in current buffer.
-(setq-default chezmoi-template-display-p nil) ;; Don't display template values by default.
-  #+end_src
-
-* Integrations
-
-** Ediff: Comparing source and target states
-
-   Emacs has a lovely package called ~ediff~ for comparing differences between files which is perfect for when the source and target states get out of sync. Quickly resolve inconsistencies between source and target states using ~chezmoi-ediff~. Or view the raw diff using ~chezmoi-diff~ if you prefer. Pipe this into your own diff workflow using ~(chezmoi-diff 1)~ to give raw diff input to some other diff management tool.
-
-
-** Completion at point
-   In template buffers, ~chezmoi-mode~ installs ~chezmoi-capf~ buffer-locally.
-   It uses Emacs' standard completion-at-point protocol and works with
-   completion UIs such as Corfu and Company through ~company-capf~. Repeated
-   requests reuse template data for
-   ~chezmoi-template-completion-cache-duration~ seconds (one second by
-   default).
-
-** Dired
-
-   In a Dired buffer, add files to chezmoi by either moving to the file or marking some and calling ~chezmoi-dired-add-marked-files~.
-
-** Magit
-
-   Use ~chezmoi-magit-status~ to jump to the ~magit-status~ for your chezmoi.
-
-** Org
-
-
-
-* Configuration
-
-** Evil
-
-   Integrate with evil mode by toggling  template display when entering insert mode.
-
-   #+begin_src emacs-lisp :noweb yes
-(defun chezmoi--evil-insert-state-enter ()
-  "Run after evil-insert-state-entry."
-  (chezmoi-template-buffer-display nil (point))
-  (remove-hook 'after-change-functions #'chezmoi-template--after-change 1))
-
-(defun chezmoi--evil-insert-state-exit ()
-  "Run after evil-insert-state-exit."
-  (chezmoi-template-buffer-display nil)
-  (chezmoi-template-buffer-display t)
-  (add-hook 'after-change-functions #'chezmoi-template--after-change nil 1))
-
-(defun chezmoi-evil ()
-  (if chezmoi-mode
-      (progn
-        (add-hook 'evil-insert-state-entry-hook #'chezmoi--evil-insert-state-enter nil 1)
-        (add-hook 'evil-insert-state-exit-hook #'chezmoi--evil-insert-state-exit nil 1))
-    (progn
-      (remove-hook 'evil-insert-state-entry-hook #'chezmoi--evil-insert-state-enter 1)
-      (remove-hook 'evil-insert-state-exit-hook #'chezmoi--evil-insert-state-exit 1))))
-(add-hook 'chezmoi-mode-hook #'chezmoi-evil)
-   #+end_src
-
-** Ligatures
-
-   Ligatures don't seem to play nice with overlaid text. When using templates, it is recommended to turn off ~ligature-mode~.
-
-   #+begin_src emacs-lisp :noweb yes
-;; Turn off ligatures because they show up poorly.
-(add-hook 'chezmoi-mode-hook #'(lambda () (when (require 'ligature)
-                                            (ligature-mode (if chezmoi-mode 0 1)))))
-   #+end_src
-
-** Org babel tangle
-
-   I find this hook useful for my emacs config files generated through org-tangle.
-
-   #+begin_src emacs-lisp :noweb yes
-(add-hook 'org-babel-post-tangle-hook #'chezmoi-write))
-   #+end_src
-
-** Spacemacs layer
-
-   Provided here is a sample layer for those who use Spacemacs. Add it by creating a Spacemacs layer called "chezmoi" and create a file in it called "packages.el" with the following code:
-
-   #+begin_src emacs-lisp :noweb yes :results silent
-(defconst chezmoi-packages
-  '(
-    chezmoi-mode)
-  "The list of Lisp packages required by the chezmoi layer.")
-
-
-(defun chezmoi/init-chezmoi-mode ()
-  (use-package chezmoi-mode
-    :vc (:url "https://github.com/cat-emacs/chezmoi-mode"
-         :rev :newest)
-    :init
-    (spacemacs/declare-prefix "f d" "chezmoi")
-
-    (spacemacs/set-leader-keys
-      "f d s" #'chezmoi-write
-      "f d g" #'chezmoi-magit-status
-      "f d d" #'chezmoi-diff
-      "f d e" #'chezmoi-ediff
-      "f d f" #'chezmoi-find
-      "f d i" #'chezmoi-sync-files
-      "f d o" #'chezmoi-open-other
-      "f d t" #'chezmoi-template-buffer-display
-      "f d c" #'chezmoi-mode)
-
-    (when (equalp dotspacemacs-editing-style 'vim)
-      (defun chezmoi--evil-insert-state-enter ()
-        "Run after evil-insert-state-entry."
-        (chezmoi-template-buffer-display nil (point))
-        (remove-hook 'after-change-functions #'chezmoi-template--after-change 1))
-
-      (defun chezmoi--evil-insert-state-exit ()
-        "Run after evil-insert-state-exit."
-        (chezmoi-template-buffer-display nil)
-        (chezmoi-template-buffer-display t)
-        (add-hook 'after-change-functions #'chezmoi-template--after-change nil 1))
-
-      (defun chezmoi-evil ()
-        (if chezmoi-mode
-            (progn
-              (add-hook 'evil-insert-state-entry-hook #'chezmoi--evil-insert-state-enter nil 1)
-              (add-hook 'evil-insert-state-exit-hook #'chezmoi--evil-insert-state-exit nil 1))
-          (progn
-            (remove-hook 'evil-insert-state-entry-hook #'chezmoi--evil-insert-state-enter 1)
-            (remove-hook 'evil-insert-state-exit-hook #'chezmoi--evil-insert-state-exit 1))))
-      (add-hook 'chezmoi-mode-hook #'chezmoi-evil))
-
-
-    (setq chezmoi-template-display-p t) ;; Display template values in all source buffers.
-
-    ;; Turn off ligatures cuz they look bad.
-    (add-hook 'chezmoi-mode-hook #'(lambda () (ligature-mode (if chezmoi-mode 0 1))))
-
-    ;; I find this hook useful for my emacs config files generated through org-tangle.
-    (defun chezmoi-org-babel-tangle ()
-      (when-let ((fle (chezmoi-target-file (buffer-file-name))))
-        (chezmoi-write file)))
-    (add-hook 'org-babel-post-tangle-hook #'chezmoi-org-babel-tangle)))
-   #+end_src
+  ~compile-age~ additionally checks the independently packaged Age
+  integration.
